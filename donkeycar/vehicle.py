@@ -82,7 +82,7 @@ class Vehicle():
                     entry.get('thread').start()
 
             #wait until the parts warm up.
-            print('Starting vehicle...')
+            print('Starting vehicle... vroom.')
             time.sleep(1)
 
             loop_count = 0
