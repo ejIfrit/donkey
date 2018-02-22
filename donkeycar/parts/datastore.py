@@ -644,7 +644,9 @@ class TubTimeStacker(TubImageStacker):
 class TubGroup(Tub):
     def __init__(self, tub_paths_arg):
         tub_paths = utils.expand_path_arg(tub_paths_arg)
+        print('TubGroup:tubpathsarg:',tub_paths_arg)
         print('TubGroup:tubpaths:', tub_paths)
+        sys.stdout.flush()
         tubs = [Tub(path) for path in tub_paths]
         self.input_types = {}
 
