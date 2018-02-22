@@ -98,10 +98,10 @@ def playback(cfg, tub_names, model_name=None):
     imPlot = ax1.imshow(img,animated=True)
     
     
-    floorImg = lookAtFloorImg(img)
-    print(floorImg)
+    floorImg = lookAtFloorImg(img,maxHeight = 0)
+    #print(floorImg)
     ax3 = plt.subplot2grid((2,2),(0,1))
-    imPlot2 = ax3.imshow(floorImg,animated=True)
+    imPlot2 = ax3.imshow(floorImg[100: , :, :],animated=True)
     
     ax2 = plt.subplot2grid((2,2),(1,0), colspan=2)
     line1, = ax2.plot(user_angles)
@@ -117,7 +117,7 @@ def playback(cfg, tub_names, model_name=None):
         record = tubs[0].get_record(i)
         img = record["cam/image_array"]
         imPlot.set_array(img)
-        imPlot2.set_array(lookAtFloorImg(img))
+        imPlot2.set_array(lookAtFloorImg(img)[100: , :, :])
         line3.set_data([i,i],[-1,1])
         #print(i)
         #sys.stdout.flush()
