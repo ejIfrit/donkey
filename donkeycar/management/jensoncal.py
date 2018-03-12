@@ -43,6 +43,21 @@ def undistort2(img_path, balance=0.0, dim2=None, dim3=None):
     undistorted_img = cv2.remap(img, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
     return undistorted_img
 
+def undistort2Img(img, balance=0.0, dim2=None, dim3=None):
+    dim1 = img.shape[:2][::-1]  #dim1 is the dimension of input image to un-distort
+    assert dim1[0]/dim1[1] == DIM[0]/DIM[1], "Image to undistort needs to have same aspect ratio as the ones used in calibration"
+    if not dim2:
+        dim2 = dim1
+    if not dim3:
+        dim3 = dim1
+    scaled_K = K * dim1[0] / DIM[0]  # The values of K is to scale with image dimension.
+    scaled_K[2][2] = 1.0  # Except that K[2][2] is always 1.0
+    # This is how scaled_K, dim2 and balance are used to determine the final K used to un-distort image. OpenCV document failed to make this clear!
+    new_K = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(scaled_K, D, dim2, np.eye(3), balance=balance)
+    map1, map2 = cv2.fisheye.initUndistortRectifyMap(scaled_K, D, np.eye(3), new_K, dim3, cv2.CV_16SC2)
+    undistorted_img = cv2.remap(img, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+    return undistorted_img
+
 def unwarp(img, src, dst, testing):
     h, w = img.shape[:2]
     # use cv2.getPerspectiveTransform() to get M, the transform matrix, and Minv, the inverse
@@ -71,19 +86,27 @@ def lookAtFloorImg(img,maxWidth = 60, maxHeight = 30):
     warp = cv2.warpPerspective(uImg, M, (maxWidth+200,maxHeight+175))
     return warp
     
+def lookAtFloorImg2(img,maxWidth = 300, maxHeight = 210,balance = 0.0):
+    uImg = undistort2Img(img,balance = balance)
+    warp = cv2.warpPerspective(uImg, M, (maxWidth,maxHeight))
+    return warp
+    
 def lookAtFloor(img_path,maxWidth = 60, maxHeight = 30):
     uImg = undistort(img_path)
     warp = cv2.warpPerspective(uImg, M, (maxWidth+200,maxHeight+175))
     return warp
+    
+def getEdges(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv2.bilateralFilter(gray, 11, 17, 17)
+    edged = cv2.Canny(gray, 0, 200)
+    return edged
 
 if __name__ == "__main__":
 
-    paths = glob.glob('./data/tub_26_18-02-18/*.jpg')
+    paths = glob.glob('/Users/edwardjackson/d_ej/data/tub_26_18-02-18/*.jpg')
 
-
-
-
-    image = undistort2(paths[0],balance=0.0)
+    image = undistort2(paths[0],balance=0.5)
     orig=image.copy()
 #
 

@@ -4,7 +4,10 @@ Scripts to drive a donkey 2 car and train a model for it.
 
 Usage:
     test.py (playback) [--tub=<tub1,tub2,..tubn>]  [--model=<model>] [--no_cache]
-
+    test.py (edgeplayback) [--tub=<tub1,tub2,..tubn>]  [--model=<model>] [--no_cache]
+    test.py (bothplayback) [--tub=<tub1,tub2,..tubn>]  [--model=<model>] [--no_cache]
+    test.py (singleShot) [--tub=<tub1,tub2,..tubn>] [--tubInd=<tubInd>]
+    
 Options:
     -h --help        Show this screen.
     --tub TUBPATHS   List of paths to tubs. Comma separated. Use quotes to use wildcards. ie "~/tubs/*"
@@ -14,7 +17,8 @@ Options:
 import os
 import sys
 from docopt import docopt
-
+import cv2
+assert cv2.__version__[0] == '3', 'The fisheye module requires opencv version >= 3.0.0'
 import donkeycar as dk
 import matplotlib as mpl
 mpl.use('TkAgg')
@@ -22,6 +26,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
 import random
+import glob
 #import parts
 from donkeycar.parts.camera import PiCamera
 from donkeycar.parts.transform import Lambda
@@ -31,9 +36,11 @@ from donkeycar.parts.datastore import Tub, TubHandler, TubGroup
 from donkeycar.parts.controller import LocalWebController, JoystickController
 from donkeycar import utils
 from jensoncal import lookAtFloorImg
+from jensoncal import lookAtFloorImg2
+from jensoncal import getEdges
 print('imports done')
 
-def playback(cfg, tub_names, model_name=None):
+def playback(cfg, tub_names, model_name=None,doEdges = False,doBoth = False):
     if not tub_names:
         tub_names = os.path.join(cfg.DATA_PATH, '*')
     tubgroup = TubGroup(tub_names)
@@ -96,12 +103,39 @@ def playback(cfg, tub_names, model_name=None):
     record = tubs[0].get_record(1)
     img = record["cam/image_array"]
     imPlot = ax1.imshow(img,animated=True)
+    edge1 = []
+    edge1.append([])
     
-    
-    floorImg = lookAtFloorImg(img,maxHeight = 0)
+    floorImg = lookAtFloorImg2(img,maxHeight = 0,balance = 1.0)[120:,:,:]
     #print(floorImg)
     ax3 = plt.subplot2grid((2,2),(0,1))
-    imPlot2 = ax3.imshow(floorImg[100: , :, :],animated=True)
+    if doEdges:
+            imPlot2= ax3.imshow(getEdges(img[40: , :, :]))
+    elif doBoth:
+            temp = lookAtFloorImg2(img,balance = 1.0)[120:,:,:]
+            edge1[0] = getEdges(temp)
+            #imPlot2= ax3.imshow(temp)
+            transformThenEdges = getEdges(temp)
+            edgesThenTransform = lookAtFloorImg2(getEdges(img),balance = 1.0)[120:,:]
+            transformThenEdges = cv2.normalize(transformThenEdges, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+            edgesThenTransform = cv2.normalize(edgesThenTransform, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+            imPlot3= ax3.imshow(transformThenEdges,cmap='jet', alpha=0.5)
+            edgeLine0, = ax3.plot([0,0],[0,1])
+            edgeLine1, = ax3.plot([0,0],[0,1])
+            edgeLine2, = ax3.plot([0,0],[0,1])
+            edgeLine3, = ax3.plot([0,0],[0,1])
+            edgeLine4, = ax3.plot([0,0],[0,1])
+            edgeLine5, = ax3.plot([0,0],[0,1])
+            edgeLine6, = ax3.plot([0,0],[0,1])
+            edgeLine7, = ax3.plot([0,0],[0,1])
+            edgeLine8, = ax3.plot([0,0],[0,1])
+            edgeLine9, = ax3.plot([0,0],[0,1])
+            edgeLine10, = ax3.plot([0,0],[0,1])
+            edgeLine11, = ax3.plot([0,0],[0,1])
+            edgeLines = [edgeLine0,edgeLine1,edgeLine2,edgeLine3,edgeLine4,edgeLine5,edgeLine6,edgeLine7,edgeLine8,edgeLine9,edgeLine10,edgeLine11]
+            #imPlot4= ax3.imshow(edgesThenTransform,cmap='gray', alpha=0.5)
+    else:
+            imPlot2= ax3.imshow(lookAtFloorImg2(img,balance = 1.0)[120:,:,:])
     
     ax2 = plt.subplot2grid((2,2),(1,0), colspan=2)
     line1, = ax2.plot(user_angles)
@@ -117,7 +151,39 @@ def playback(cfg, tub_names, model_name=None):
         record = tubs[0].get_record(i)
         img = record["cam/image_array"]
         imPlot.set_array(img)
-        imPlot2.set_array(lookAtFloorImg(img)[100: , :, :])
+        if doEdges:
+            imPlot2.set_array(getEdges(img[40: , :, :]))
+        elif doBoth:
+            temp = lookAtFloorImg2(img,balance = 1.0)[120:,:,:]
+            #imPlot2.set_array(temp)
+            
+            transformThenEdges = getEdges(temp)
+            edgesThenTransform = lookAtFloorImg2(getEdges(img),balance = 1.0)[120:,:]
+            imPlot3.set_array((transformThenEdges+edgesThenTransform+edge1[0])/4)
+            edge1[0] = (transformThenEdges+edgesThenTransform)
+            print("edges then transform")
+            print(edge1[0].shape)
+            print("transform then edges")
+            print(lookAtFloorImg2(getEdges(img),balance = 1.0)[120:,:].shape)
+            
+            minLineLength = 50
+            maxLineGap = 5
+            lines = cv2.HoughLinesP(edgesThenTransform,1,np.pi/180,100,minLineLength,maxLineGap)
+            nPlot = 0
+            for x in range(0, (len(lines))):
+                for x1,y1,x2,y2 in lines[x]:
+                    print("got lines")
+                    angle = float(y2-y1)/float(x2-x1)
+                    print(angle)
+                    print(y1)
+                    print(y2)
+                    if ((abs(angle)>0.18)and(nPlot<len(edgeLines))):
+                        edgeLines[nPlot].set_data([x1,x2],[y1,y2])
+                        nPlot+=1
+            
+            #imPlot4.set_array(edgesThenTransform)
+        else:
+            imPlot2.set_array(lookAtFloorImg2(img,balance = 1.0)[120:,:,:])
         line3.set_data([i,i],[-1,1])
         #print(i)
         #sys.stdout.flush()
@@ -145,7 +211,20 @@ def playback(cfg, tub_names, model_name=None):
     #pilot_throttles.append(pilot_throttle)
             
 
-    
+def playback1shot(cfg, tub, tubInd, doEdges=True):
+    paths = glob.glob(tub+'/*.jpg')
+    print(tub)
+    print(int(tubInd))
+    #print(paths)
+    sys.stdout.flush()
+    fig = plt.figure()
+    raw = cv2.imread(paths[int(tubInd)])
+    print(raw.shape)
+    ax1 = plt.subplot2grid((2,1),(0,0))
+    imPlot = ax1.imshow(raw)
+    ax2 = plt.subplot2grid((2,1),(1,0))
+    imPlot2 = ax2.imshow(lookAtFloorImg2(raw,balance = 1.0)[100:,:,:])
+    plt.show()
 
 if __name__ == '__main__':
     args = docopt(__doc__)
@@ -156,5 +235,20 @@ if __name__ == '__main__':
         model = args['--model']
         cache = not args['--no_cache']
         playback(cfg, tub, model)
+    if args['edgeplayback']:
+        tub = args['--tub']
+        model = args['--model']
+        cache = not args['--no_cache']
+        playback(cfg, tub, model, doEdges=True)
+    if args['bothplayback']:
+        tub = args['--tub']
+        model = args['--model']
+        cache = not args['--no_cache']
+        playback(cfg, tub, model, doEdges=False,doBoth=True)
+    if args['singleShot']:
+        tub = args['--tub']
+        tubInd = args['--tubInd']
+        cache = not args['--no_cache']
+        playback1shot(cfg, tub, tubInd, doEdges=True)
 
 
