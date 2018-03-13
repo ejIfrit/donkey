@@ -119,7 +119,7 @@ def playback(cfg, tub_names, model_name=None,doEdges = False,doBoth = False):
             edgesThenTransform = lookAtFloorImg2(getEdges(img),balance = 1.0)[120:,:]
             transformThenEdges = cv2.normalize(transformThenEdges, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
             edgesThenTransform = cv2.normalize(edgesThenTransform, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-            imPlot3= ax3.imshow(transformThenEdges,cmap='jet', alpha=0.5)
+            imPlot3= ax3.imshow(transformThenEdges,cmap='gray', alpha=0.5)
             edgeLine0, = ax3.plot([0,0],[0,1])
             edgeLine1, = ax3.plot([0,0],[0,1])
             edgeLine2, = ax3.plot([0,0],[0,1])
@@ -144,13 +144,15 @@ def playback(cfg, tub_names, model_name=None,doEdges = False,doBoth = False):
         line4, = ax2.plot(pilot_angles)
         line5, = ax2.plot(pilot_throttles)
     line3, = ax2.plot([0,0],[-1,1])
+    line4, = ax2.plot([0,0],[-1,1])
     
-    
+    allAngles = []
     
     def animate(i):
         record = tubs[0].get_record(i)
         img = record["cam/image_array"]
         imPlot.set_array(img)
+        
         if doEdges:
             imPlot2.set_array(getEdges(img[40: , :, :]))
         elif doBoth:
@@ -159,32 +161,41 @@ def playback(cfg, tub_names, model_name=None,doEdges = False,doBoth = False):
             
             transformThenEdges = getEdges(temp)
             edgesThenTransform = lookAtFloorImg2(getEdges(img),balance = 1.0)[120:,:]
-            imPlot3.set_array((transformThenEdges+edgesThenTransform+edge1[0])/4)
+            #imPlot3.set_array((transformThenEdges+edgesThenTransform+edge1[0])/4)
+            imPlot3.set_array(edgesThenTransform)
             edge1[0] = (transformThenEdges+edgesThenTransform)
-            print("edges then transform")
-            print(edge1[0].shape)
-            print("transform then edges")
-            print(lookAtFloorImg2(getEdges(img),balance = 1.0)[120:,:].shape)
+            #print("edges then transform")
+            #print(edge1[0].shape)
+            #print("transform then edges")
+            #print(lookAtFloorImg2(getEdges(img),balance = 1.0)[120:,:].shape)
             
-            minLineLength = 50
-            maxLineGap = 5
-            lines = cv2.HoughLinesP(edgesThenTransform,1,np.pi/180,100,minLineLength,maxLineGap)
+            minLineLength = 30
+            maxLineGap = 10
+            lines = cv2.HoughLinesP(edgesThenTransform,1,np.pi/180,40,minLineLength,maxLineGap)
             nPlot = 0
+            for x in range(0, (len(edgeLines))):
+                edgeLines[x].set_data([0,0],[0,0])
+            myX = []
+            myY = []
             for x in range(0, (len(lines))):
                 for x1,y1,x2,y2 in lines[x]:
-                    print("got lines")
-                    angle = float(y2-y1)/float(x2-x1)
-                    print(angle)
-                    print(y1)
-                    print(y2)
-                    if ((abs(angle)>0.18)and(nPlot<len(edgeLines))):
+                    if (np.abs(y1-y2)>10) and nPlot<len(edgeLines):
+                        #ax3.plot([x1,x2],[y1,y2])
                         edgeLines[nPlot].set_data([x1,x2],[y1,y2])
+                        myX.append(x2-x1)
+                        myY.append(y1-y2)
+                        print (min(y1,y2))
                         nPlot+=1
             
+            #np.arctan2(y, x) * 180 / np.pi
+            myAngle = np.arctan(np.median(myX)/np.median(myY))
+            print(myAngle)
+            allAngles.append(myAngle)
+            line3.set_data(range(len(allAngles)),allAngles)
             #imPlot4.set_array(edgesThenTransform)
         else:
             imPlot2.set_array(lookAtFloorImg2(img,balance = 1.0)[120:,:,:])
-        line3.set_data([i,i],[-1,1])
+        
         #print(i)
         #sys.stdout.flush()
         return imPlot,
@@ -193,7 +204,7 @@ def playback(cfg, tub_names, model_name=None,doEdges = False,doBoth = False):
     # Init only required for blitting to give a clean slate.
     def init():
         record = tubs[0].get_record(1)
-        img = record["cam/image_array"]
+        img #= record["cam/image_array"]
         imPlot.set_array(img)
         line3.set_data([0,0],[-1,1])
         return imPlot,
@@ -219,11 +230,48 @@ def playback1shot(cfg, tub, tubInd, doEdges=True):
     sys.stdout.flush()
     fig = plt.figure()
     raw = cv2.imread(paths[int(tubInd)])
+    print(raw.dtype)
+    edgesThenTransform = lookAtFloorImg2(getEdges(raw),balance = 1.0)[120:,:]
+    print(edgesThenTransform.dtype)
+    print('max')
+    print(edgesThenTransform.max())
+    print('min')
+    print(edgesThenTransform.min())
     print(raw.shape)
-    ax1 = plt.subplot2grid((2,1),(0,0))
+    ax1 = plt.subplot2grid((5,1),(0,0))
     imPlot = ax1.imshow(raw)
-    ax2 = plt.subplot2grid((2,1),(1,0))
-    imPlot2 = ax2.imshow(lookAtFloorImg2(raw,balance = 1.0)[100:,:,:])
+    ax2 = plt.subplot2grid((5,1),(1,0))
+    imPlot2 = ax2.imshow(edgesThenTransform)
+    ax3 = plt.subplot2grid((5,1),(2,0))
+    imPlot3 = ax3.imshow(edgesThenTransform,cmap='gray')
+    minLineLength = 30
+    maxLineGap = 10
+    lines = cv2.HoughLinesP(edgesThenTransform,1,np.pi/180,40,minLineLength,maxLineGap)
+    for x in range(0, (len(lines))):
+        for x1,y1,x2,y2 in lines[x]:
+            if (np.abs(y1-y2)>10):
+                ax3.plot([x1,x2],[y1,y2])
+    ax4 = plt.subplot2grid((5,1),(3,0))
+    
+    for x in range(0, (len(lines))):
+        for x1,y1,x2,y2 in lines[x]:
+            ax4.plot(x,np.abs(y1-y2),marker='o') 
+            
+    
+    tub_paths = utils.expand_path_arg(tub)
+    tubs = [Tub(path) for path in tub_paths]
+    record = tubs[0].get_record(tubInd)   
+    raw2 = record["cam/image_array"] 
+    ax5 = plt.subplot2grid((5,1),(4,0))
+    edgesThenTransform2 = lookAtFloorImg2(getEdges(raw2),balance = 1.0)[120:,:]
+    imPlot5 = ax5.imshow(edgesThenTransform2)
+    lines2 = cv2.HoughLinesP(edgesThenTransform2,1,np.pi/180,40,minLineLength,maxLineGap)
+    for x in range(0, (len(lines2))):
+        for x1,y1,x2,y2 in lines2[x]:
+            if (np.abs(y1-y2)>10):
+                ax5.plot([x1,x2],[y1,y2])
+    print(raw.dtype)  
+    
     plt.show()
 
 if __name__ == '__main__':
