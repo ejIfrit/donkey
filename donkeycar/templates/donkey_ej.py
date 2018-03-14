@@ -3,7 +3,7 @@
 Scripts to drive a donkey 2 car and train a model for it. 
 
 Usage:
-    manage.py (drive) [--model=<model>] [--js]
+    manage.py (drive) [--model=<model>] [--js] [--lf]
     manage.py (train) [--tub=<tub1,tub2,..tubn>]  (--model=<model>) [--no_cache]
     
 =======
@@ -21,14 +21,15 @@ import donkeycar as dk
 #import parts
 from donkeycar.parts.camera import PiCamera
 from donkeycar.parts.transform import Lambda
-from donkeycar.parts.keras import KerasCategorical
+#from donkeycar.parts.keras import KerasCategorical
+from donkeycar.parts.cv_pilot import KerasCategorical
 from donkeycar.parts.actuator import PCA9685, PWMSteering, PWMThrottle
 from donkeycar.parts.datastore import TubHandler, TubGroup
 from donkeycar.parts.controller import LocalWebController, JoystickController
 
 
 
-def drive(cfg, model_path=None, use_joystick=False):
+def drive(cfg, model_path=None, use_joystick=False, use_lf = False):
     '''
     Construct a working robotic vehicle from many parts.
     Each part runs as a job in the Vehicle loop, calling either
@@ -73,13 +74,18 @@ def drive(cfg, model_path=None, use_joystick=False):
     V.add(pilot_condition_part, inputs=['user/mode'], outputs=['run_pilot'])
     
     #Run the pilot if the mode is not user.
-    kl = KerasCategorical()
-    if model_path:
-        kl.load(model_path)
-    
-    V.add(kl, inputs=['cam/image_array'], 
-          outputs=['pilot/angle', 'pilot/throttle'],
-          run_condition='run_pilot')
+    if not use_lf:
+        kl = KerasCategorical()
+        if model_path:
+            kl.load(model_path)
+        V.add(kl, inputs=['cam/image_array'], 
+                outputs=['pilot/angle', 'pilot/throttle'],
+                run_condition='run_pilot')
+    if use_lf:
+        lf = lineFollower()
+        V.add(lf, inputs=['cam/image_array'], 
+            outputs=['pilot/angle', 'pilot/throttle'],
+            run_condition='run_pilot')
     
     
     #Choose what inputs should change the car.
@@ -176,7 +182,7 @@ if __name__ == '__main__':
     cfg = dk.load_config()
     
     if args['drive']:
-        drive(cfg, model_path = args['--model'], use_joystick=args['--js'])
+        drive(cfg, model_path = args['--model'], use_joystick=args['--js'],use_lf=args['--lf'])
 
     elif args['train']:
         tub = args['--tub']
