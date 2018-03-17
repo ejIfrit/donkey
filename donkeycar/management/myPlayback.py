@@ -161,18 +161,19 @@ def playback(cfg, tub_names, model_name=None,doEdges = False,doBoth = False):
             #imPlot2.set_array(temp)
             
             transformThenEdges = getEdges(temp)
-            edgesThenTransform = lookAtFloorImg2(getEdges(img),balance = 1.0)[120:,:]
+            #edgesThenTransform = lookAtFloorImg2(getEdges(img),balance = 1.0)[120:,:]
+            edgesThenTransform = (getEdges(img[40:,:,:]))
             #imPlot3.set_array((transformThenEdges+edgesThenTransform+edge1[0])/4)
             imPlot3.set_array(edgesThenTransform)
-            edge1[0] = (transformThenEdges+edgesThenTransform)
+            #edge1[0] = (transformThenEdges+edgesThenTransform)
             #print("edges then transform")
             #print(edge1[0].shape)
             #print("transform then edges")
             #print(lookAtFloorImg2(getEdges(img),balance = 1.0)[120:,:].shape)
             
-            minLineLength = 30
-            maxLineGap = 10
-            lines = cv2.HoughLinesP(edgesThenTransform,1,np.pi/180,40,minLineLength,maxLineGap)
+            minLineLength = 10
+            maxLineGap = 20
+            lines = cv2.HoughLinesP(edgesThenTransform,1,np.pi/180,30,np.array([]),minLineLength,maxLineGap)
             nPlot = 0
             for x in range(0, (len(edgeLines))):
                 edgeLines[x].set_data([0,0],[0,0])
@@ -181,33 +182,37 @@ def playback(cfg, tub_names, model_name=None,doEdges = False,doBoth = False):
             myX1 = []
             myIntercept = []
             myGrad = []
-            for x in range(0, (len(lines))):
-                for x1,y1,x2,y2 in lines[x]:
-                    if (np.abs(y1-y2)>10) and nPlot<len(edgeLines):
+            
+            if lines is not None:
+                print(len(lines))
+                for x in range(0, (len(lines))):
+  
+                    for x1,y1,x2,y2 in lines[x]:
+                        if (np.abs(y1-y2)>15) and nPlot<len(edgeLines):
                         #ax3.plot([x1,x2],[y1,y2])
-                        edgeLines[nPlot].set_data([x1,x2],[y1,y2])
-                        myX.append(x2-x1)
-                        myY.append(y1-y2)
-                        myIntercept.append((x2*(y1-90)-x1*(y2-90))/(y1-y2))
+                            edgeLines[nPlot].set_data([x1,x2],[y1,y2])
+                            myX.append(x2-x1)
+                            myY.append(y1-y2)
+                            myIntercept.append((x2*(y1-90)-x1*(y2-90))/(y1-y2))
                         
-                        myGrad.append((x2-x1)/(y1-y2))
-                        print (min(y1,y2))
-                        nPlot+=1
+                            myGrad.append((x2-x1)/(y1-y2))
+                        #print (min(y1,y2))
+                            nPlot+=1
             
             #np.arctan2(y, x) * 180 / np.pi
-            myAngle = np.arctan(np.median(myGrad))
-            print(myAngle)
-            allAngles.append(myAngle)
-            allIntercepts.append(np.median(myIntercept)/300)
-            line3.set_data(range(len(allAngles)),allAngles)
-            line4.set_data(range(len(allAngles)),allIntercepts)
-            ax2.set_ylim(min(allIntercepts),max(allIntercepts))
+                myAngle = np.arctan(np.median(myGrad))
+                #print(myAngle)
+                allAngles.append(myAngle)
+                allIntercepts.append(np.median(myIntercept)/300)
+                line3.set_data(range(len(allAngles)),allAngles)
+                line4.set_data(range(len(allAngles)),allIntercepts)
+            #ax2.set_ylim(min(allIntercepts),max(allIntercepts))
             #imPlot4.set_array(edgesThenTransform)
         else:
             imPlot2.set_array(lookAtFloorImg2(img,balance = 1.0)[120:,:,:])
         
         #print(i)
-        #sys.stdout.flush()
+        #sys.stdout.flush(
         return imPlot,
 
 

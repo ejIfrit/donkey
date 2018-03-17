@@ -13,7 +13,6 @@ Options:
 """
 import os
 from docopt import docopt
-
 import donkeycar as dk
 
 #import parts

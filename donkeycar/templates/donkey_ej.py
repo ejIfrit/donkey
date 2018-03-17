@@ -22,7 +22,7 @@ import donkeycar as dk
 from donkeycar.parts.camera import PiCamera
 from donkeycar.parts.transform import Lambda
 #from donkeycar.parts.keras import KerasCategorical
-from donkeycar.parts.cv_pilot import KerasCategorical
+from donkeycar.parts.cv_pilot import lineFollower
 from donkeycar.parts.actuator import PCA9685, PWMSteering, PWMThrottle
 from donkeycar.parts.datastore import TubHandler, TubGroup
 from donkeycar.parts.controller import LocalWebController, JoystickController
@@ -75,6 +75,7 @@ def drive(cfg, model_path=None, use_joystick=False, use_lf = False):
     
     #Run the pilot if the mode is not user.
     if not use_lf:
+        print('using NN driver')
         kl = KerasCategorical()
         if model_path:
             kl.load(model_path)
@@ -82,10 +83,11 @@ def drive(cfg, model_path=None, use_joystick=False, use_lf = False):
                 outputs=['pilot/angle', 'pilot/throttle'],
                 run_condition='run_pilot')
     if use_lf:
+        print('using line follower')
         lf = lineFollower()
         V.add(lf, inputs=['cam/image_array'], 
             outputs=['pilot/angle', 'pilot/throttle'],
-            run_condition='run_pilot')
+            run_condition='run_pilot',threaded = True)
     
     
     #Choose what inputs should change the car.
