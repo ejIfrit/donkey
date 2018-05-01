@@ -22,7 +22,7 @@ import donkeycar as dk
 from donkeycar.parts.camera import PiCamera
 from donkeycar.parts.transform import Lambda
 #from donkeycar.parts.keras import KerasCategorical
-from donkeycar.parts.cv_pilot import lineFollower
+from donkeycar.parts.cv_pilot import lineFollower, lineController
 from donkeycar.parts.actuator import PCA9685, PWMSteering, PWMThrottle
 from donkeycar.parts.datastore import TubHandler, TubGroup
 from donkeycar.parts.controller import LocalWebController, JoystickController
@@ -86,9 +86,12 @@ def drive(cfg, model_path=None, use_joystick=False, use_lf = False):
         print('using line follower')
         lf = lineFollower()
         V.add(lf, inputs=['cam/image_array'], 
+            outputs=['line/angle', 'line/intercept'],
+            run_condition='run_pilot',threaded = False)
+        lk = lineController()
+        V.add(lk, inputs=['line/angle', 'line/intercept'], 
             outputs=['pilot/angle', 'pilot/throttle'],
-            run_condition='run_pilot',threaded = True)
-    
+            run_condition='run_pilot',threaded = False)
     
     #Choose what inputs should change the car.
     def drive_mode(mode, 

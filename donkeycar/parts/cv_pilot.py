@@ -28,8 +28,8 @@ def getAngle(imgIn):
         myGrad = []
         nPlot = 0
         nLinesMax = 11
-        myAngle=0
-        interceptOut = 0
+        myAngle=None
+        interceptOut = None
         if lines is not None:
             print("----lines----")
             print(len(lines))
@@ -44,12 +44,12 @@ def getAngle(imgIn):
             
             #np.arctan2(y, x) * 180 / np.pi
             myAngle = np.arctan(np.median(myGrad))
-            if np.isnan(myAngle): myAngle = -10
+            if np.isnan(myAngle): myAngle = None
             interceptOut = np.median(myIntercept)
-            if np.isnan(interceptOut): interceptOut = -10
+            if np.isnan(interceptOut): interceptOut = None
     else:
-        myAngle = -10
-        interceptOut = -10        
+        myAngle = None
+        interceptOut = None        
     return myAngle, interceptOut 
 
 class lineFollower():
@@ -75,13 +75,13 @@ class lineFollower():
         print('count', self.tempInt)
         print('angle', myAngle)
         print('interceptOut', interceptOut)
-        throttle = 0.
-        if myAngle==-10:
-             angle_unbinned=self.angle_unbinned
-        else:
+        #throttle = 0.
+        #if myAngle==-10:
+        #     angle_unbinned=self.angle_unbinned
+        #else:
              #angle_unbinned = clip(angle_unbinned*5.,-1.,1.)
-             angle_unbinned = clip((interceptOut-70)/4.,-1.,1.) 
-        return angle_unbinned, throttle
+        #     angle_unbinned = clip((interceptOut-70)/4.,-1.,1.) 
+        return myAngle, interceptOut
         
     def update(self):
         #the funtion run in it's own thread
@@ -93,3 +93,31 @@ class lineFollower():
         return self.angle_unbinned,self.throttle
     def shutdown(self):
         pass
+        
+class lineController():
+    def __init__(self, *args, **kwargs):
+        self.dAngle = 0. # the d is for demand
+        self.dIntercept = 70.
+        self.kIntercept = 1.
+        self.kAngle = 20.
+        self.lastAngleOut = 0.
+        self.lastIntercept = 70.
+    def run(self,angleIn,interceptIn):
+        if interceptIn is not None:
+            angle_intercept1 = (interceptIn-self.dIntercept)*self.kIntercept
+            angle_imAngle2 = (angleIn-self.dAngle)*self.kAngle
+            angle_unbinned = angle_intercept1*0.+angle_imAngle2*1.0
+            angle_unbinned = clip(angle_unbinned,-1.,1.)
+            self.lastIntercept = interceptIn
+        else:
+            angle_unbinned = self.lastIntercept
+        throttle = 0.
+        return angle_unbinned, throttle
+    def shutdown(self):
+        pass 
+            
+            
+        
+        
+        
+        

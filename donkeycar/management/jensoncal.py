@@ -98,6 +98,7 @@ def lookAtFloor(img_path,maxWidth = 60, maxHeight = 30):
     
 def getEdges(img):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    #gray = cv2.normalize(gray,np.array([]), alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
     gray = cv2.bilateralFilter(gray, 11, 17, 17)
     edged = cv2.Canny(gray, 0, 200)
     return edged
