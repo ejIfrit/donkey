@@ -6,6 +6,7 @@ Usage:
     test.py (playback) [--tub=<tub1,tub2,..tubn>]  [--model=<model>] [--no_cache]
     test.py (edgeplayback) [--tub=<tub1,tub2,..tubn>]  [--model=<model>] [--no_cache]
     test.py (bothplayback) [--tub=<tub1,tub2,..tubn>]  [--model=<model>] [--no_cache]
+    test.py (car) [--tub=<tub1,tub2,..tubn>]  [--model=<model>] [--no_cache]
     test.py (singleShot) [--tub=<tub1,tub2,..tubn>] [--tubInd=<tubInd>]
     
 Options:
@@ -34,13 +35,14 @@ from donkeycar.parts.transform import Lambda
 from donkeycar.parts.actuator import PCA9685, PWMSteering, PWMThrottle
 from donkeycar.parts.datastore import Tub, TubHandler, TubGroup
 from donkeycar.parts.controller import LocalWebController, JoystickController
+from donkeycar.parts.cv_pilot import clip
 from donkeycar import utils
 from jensoncal import lookAtFloorImg
 from jensoncal import lookAtFloorImg2
 from jensoncal import getEdges
 print('imports done')
 
-def playback(cfg, tub_names, model_name=None,doEdges = False,doBoth = False):
+def playback(cfg, tub_names, model_name=None,doEdges = False,doBoth = False,doCar = False):
     if not tub_names:
         tub_names = os.path.join(cfg.DATA_PATH, '*')
     tubgroup = TubGroup(tub_names)
@@ -111,7 +113,7 @@ def playback(cfg, tub_names, model_name=None,doEdges = False,doBoth = False):
     ax3 = plt.subplot2grid((2,2),(0,1))
     if doEdges:
             imPlot2= ax3.imshow(getEdges(img[lchop: , :, :]))
-    elif doBoth:
+    elif doBoth or doCar:
             temp = lookAtFloorImg2(img,balance = 1.0)[120:,:,:]
             edge1[0] = getEdges(temp)
             #imPlot2= ax3.imshow(temp)
@@ -138,8 +140,13 @@ def playback(cfg, tub_names, model_name=None,doEdges = False,doBoth = False):
             edgeLine9, = ax3.plot([0,0],[0,1],color='green')
             edgeLine10, = ax3.plot([0,0],[0,1],color='green')
             edgeLine11, = ax3.plot([0,0],[0,1],color='green')
+            
+            steerLine, = ax1.plot([80,80],[0,80],color='orange')
+            
             edgeLines = [edgeLine0,edgeLine1,edgeLine2,edgeLine3,edgeLine4,edgeLine5,edgeLine6,edgeLine7,edgeLine8,edgeLine9,edgeLine10,edgeLine11]
             #imPlot4= ax3.imshow(edgesThenTransform,cmap='gray', alpha=0.5)
+
+            
     else:
             imPlot2= ax3.imshow(lookAtFloorImg2(img,balance = 1.0)[120:,:,:])
     
@@ -202,7 +209,7 @@ def playback(cfg, tub_names, model_name=None,doEdges = False,doBoth = False):
   
                     for x1,y1,x2,y2 in lines[x]:
                         if (np.abs(y1-y2)>15) and nPlot<len(edgeLines):
-                        #ax3.plot([x1,x2],[y1,y2])
+                        
                             edgeLines[nPlot].set_data([x1,x2],[y1,y2])
                             myX.append(x2-x1)
                             myY.append(y1-y2)
@@ -221,6 +228,47 @@ def playback(cfg, tub_names, model_name=None,doEdges = False,doBoth = False):
                 line4.set_data(range(len(allAngles)),allIntercepts)
             #ax2.set_ylim(min(allIntercepts),max(allIntercepts))
             #imPlot4.set_array(edgesThenTransform)
+        elif doCar:
+            edgesThenTransform =getEdges(img[50:,:,:])
+            minLineLength = 10
+            maxLineGap = 20
+            imPlot3.set_array(edgesThenTransform)
+            lines = cv2.HoughLinesP(edgesThenTransform,1,np.pi/180,25,np.array([]),minLineLength,maxLineGap)
+            myX = []
+            myY = []
+            myX1 = []
+            myIntercept = []
+            myGrad = []
+            nPlot = 0
+            for x in range(0, (len(edgeLines))):
+                edgeLines[x].set_data([0,0],[0,0])
+            nLinesMax = 11
+            myAngle=None
+            interceptOut = None
+            if lines is not None:
+                print("----lines----")
+                print(len(lines))
+                for x in range(0, (len(lines))):
+                    for x1,y1,x2,y2 in lines[x]:
+                        if (np.abs(y1-y2)>10) and nPlot<nLinesMax:
+                            edgeLines[nPlot].set_data([x1,x2],[y1,y2])
+                            myX.append(x2-x1)
+                            myY.append(y1-y2)
+                            myIntercept.append((x2*(y1-90)-x1*(y2-90))/(y1-y2))                        
+                            myGrad.append((x2-x1)/(y1-y2))
+                            nPlot+=1
+            
+            #np.arctan2(y, x) * 180 / np.pi
+                myAngle = np.arctan(np.median(myGrad))
+                if np.isnan(myAngle): myAngle = None
+                else: steerLine.set_data([80,80+40*np.sin(myAngle)],[80,80-40*np.cos(myAngle)])
+                interceptOut = np.median(myIntercept)
+                if np.isnan(interceptOut): interceptOut = None
+            allAngles.append(myAngle)
+            allIntercepts.append(np.median(myIntercept)/300)
+            line3.set_data(range(len(allAngles)),allAngles)
+            line4.set_data(range(len(allAngles)),allIntercepts)
+       
         else:
             imPlot2.set_array(lookAtFloorImg2(img,balance = 1.0)[120:,:,:])
         
@@ -321,6 +369,11 @@ if __name__ == '__main__':
         model = args['--model']
         cache = not args['--no_cache']
         playback(cfg, tub, model, doEdges=False,doBoth=True)
+    if args['car']:
+        tub = args['--tub']
+        model = args['--model']
+        cache = not args['--no_cache']
+        playback(cfg, tub, model, doEdges=False,doBoth=False,doCar=True)
     if args['singleShot']:
         tub = args['--tub']
         tubInd = args['--tubInd']
