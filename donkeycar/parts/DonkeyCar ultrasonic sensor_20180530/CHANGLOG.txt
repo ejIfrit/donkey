@@ -1,0 +1,8 @@
+20180530
+- changed Part to non-treaded to reduce variance in measured distance
+- improved Part's echo loops by moving time.time() call outside the loops
+- added break limits for echo loops
+
+20180515
+- initial version
+
