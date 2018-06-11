@@ -12,6 +12,7 @@ Options:
 """
 from docopt import docopt
 import matplotlib as mpl
+import sys
 mpl.use('TkAgg')
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -29,7 +30,7 @@ class LineBuilder:
         self.xs = list(line.get_xdata())
         self.ys = list(line.get_ydata())
         self.cid = line.figure.canvas.mpl_connect('button_press_event', self)
-
+        self.z  = []
     def __call__(self, event):
         print('click', event)
         if event.inaxes!=self.line.axes: return
@@ -44,10 +45,15 @@ class LineBuilder:
         
         
     def bestFit(self):
-        z = np.polyfit(self.ys, self.xs, 2)
-        print('z:' + str(z))
-        p = np.poly1d(z)
+        self.z = np.polyfit(self.ys, self.xs, 2)
+        print('z:' + str(self.z))
+        p = np.poly1d(self.z)
         self.lineFit.set_data(p(self.ys),self.ys)
+        
+        
+        
+    
+    
 def playback(cfg,tub_names='/Users/edwardjackson/d_ej4/data/test/tub_21_18-05-01'):
 
     tubgroup = TubGroup(tub_names)
@@ -58,8 +64,19 @@ def playback(cfg,tub_names='/Users/edwardjackson/d_ej4/data/test/tub_21_18-05-01
 #            print(num_records)
  #           for iRec in tub.get_index(shuffled=False):
     tub = tubs[0]
+    
     tubInds = tub.get_index(shuffled=False)
     record = tub.get_record(tubInds[0])
+    print('tub id = ' +str(tub.current_ix))
+    tub.current_ix = tubInds[0]
+    print('tub id = ' +str(tub.current_ix))
+    jsonthing = tub.get_json_record(tubInds[0])
+    print(jsonthing)
+    sys.stdout.flush()
+    
+     
+    
+    
     img = record["cam/image_array"]
 
 
@@ -72,7 +89,12 @@ def playback(cfg,tub_names='/Users/edwardjackson/d_ej4/data/test/tub_21_18-05-01
     im = ax.imshow(img)
     linebuilder = LineBuilder(line, lineFit)
     plt.show()
-
+    
+    jsonthing["bestfit"] = linebuilder.z.tolist()
+    print(jsonthing)
+    sys.stdout.flush()
+    tub.write_json_record(jsonthing)
+    
 
 if __name__ == '__main__':
     args = docopt(__doc__)
