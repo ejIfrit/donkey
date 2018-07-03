@@ -26,6 +26,24 @@ from donkeycar.parts.datastore import Tub, TubHandler, TubGroup
 from donkeycar import utils
 from jensoncal import getEdges
 
+def normalise(x,maxVal,minVal):
+    y = (x-minVal)/(maxVal-minVal)
+
+def linear_bin(a):
+    b = round(a*15)
+    arr = np.zeros(15)
+    arr[int(b)] = 1
+    return arr
+
+def preProcBestFit(Y,maxVal,minVal):
+    d = []
+    for y in Y:
+        y = normalise(y)
+        arr = np.zeros(15)
+        arr[linear_bin(y)] = 1
+        d.append(arr)
+    return np.array(d)
+
 
 class LineBuilder:
     def __init__(self, line, lineFit):
@@ -169,8 +187,22 @@ class LineBuilderTub:
         ax = fig.add_subplot(111, projection='3d')
         ax.scatter(a,b,c)
         return isOK,nBad
-
-
+    def maxminTubs(self):
+        nRecords = len(self.tubInds)
+        a = []
+        b = []
+        c = []
+        for k in range(nRecords):
+            record = self.tub.get_record(self.tubInds[k])
+            if "bestfit" in record:
+                a.append(record["bestfit"][0])
+                b.append(record["bestfit"][1])
+                c.append(record["bestfit"][2])
+        maxVec = np.array([max(a),max(b),max(c)])
+        minVec = np.array([min(a),min(b),min(c)])
+        return maxVec,minVec
+    def normalise(x,maxVal,minVal):
+        y = (x-minVal)/(maxVal-minVal)
 
 
 
@@ -250,6 +282,33 @@ def trainOnLines(cfg,tub_names='/Users/edwardjackson/d_ej4/data/test/tub_21_18-0
     else:
         print("Not enough lines")
         print(str(nBad)+" empty records")
+    maxVec,minVec = lb.maxminTubs()
+
+    print("maxVec")
+    print(maxVec)
+    print("minVec")
+    print(minVec)
+
+    X_keys = ['cam/image_array']
+    y_keys = ['user/angle', 'user/throttle']
+
+
+
+
+
+    def rt(record):
+        record['bestfit'] = linear_binArray(record['bestfit'])
+        return record
+
+    #kl = KerasCategorical()
+    #print('tub_names', tub_names)
+    #if not tub_names:
+    #    tub_names = os.path.join(cfg.DATA_PATH, '*')
+    #tubgroup = TubGroup(tub_names)
+    train_gen, val_gen = tubgroup.get_train_val_gen(X_keys, y_keys, record_transform=rt,
+                                                    batch_size=cfg.BATCH_SIZE,
+                                                    train_frac=cfg.TRAIN_TEST_SPLIT)
+
 
     plt.show()
 
