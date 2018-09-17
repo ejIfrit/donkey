@@ -292,10 +292,6 @@ def trainOnLines(cfg,tub_names='/Users/edwardjackson/d_ej4/data/test/tub_21_18-0
     X_keys = ['cam/image_array']
     y_keys = ['user/angle', 'user/throttle']
 
-
-
-
-
     def rt(record):
         record['bestfit'] = linear_binArray(record['bestfit'])
         return record
