@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Scripts to drive a donkey 2 car and train a model for it.
+Look at a tub and process it based on thresholds and extracting road markers
 
 Usage:
     test.py (thresh1) [--tub=<tub1,tub2,..tubn>] [--tubInd=<tubInd>] [--nCrop=<n1>]
@@ -31,8 +31,14 @@ from donkeycar import utils
 from jensoncal import lookAtFloorImg
 from jensoncal import lookAtFloorImg2
 from jensoncal import getEdges
+from image_thresholding.get_Markers import findLineMarkers
+from image_thresholding.analyse_masks import runClfImg
+from sklearn.svm import SVC
+from sklearn.externals import joblib
 print('imports done')
 
+clf_cone = joblib.load('image_thresholding/cone_RGB_000.pkl')
+clf_track = joblib.load('image_thresholding/track_HSV_000.pkl')
 #M = np.array([[3.48407563   4.68019348  -193.634274], [ -0.0138199636 4.47986683 -38.3089390], [0.0 0.0 1.0]])
 #M=np.array([[-1.3026235852665167, -3.499123877776032, 245.75446559156023], [-0.03176219298555294, -5.213807674195841, 254.91345254435038], [-0.000211747953236998, -0.02383023318793577, 1.0]])
 #M=np.array([[3.4840756328915137, 4.680193479489915, -193.6342735096424], [-0.013819963565551818, 4.479866825805638, -38.308939003706215], [-0.0009213309043700334, 0.06172917059279264, 1.0]])
@@ -43,7 +49,8 @@ def getThresh(raw,threshLevel=127):
     gray = cv2.cvtColor(raw, cv2.COLOR_BGR2GRAY)
     #gray = cv2.normalize(gray, np.array([]),alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
     gray = cv2.bilateralFilter(gray, 11, 17, 17)
-    ret,threshed = cv2.threshold(gray,threshLevel,255,cv2.THRESH_TOZERO)
+    ret,threshed = cv2.threshold(gray,threshLevel,1,cv2.THRESH_BINARY_INV)
+    #threshed = 255-threshed
     return threshed
 
 def imProc(raw,nCrop = 45,threshLevel=127):
@@ -52,7 +59,7 @@ def imProc(raw,nCrop = 45,threshLevel=127):
     threshed = getThresh(raw,threshLevel)
     return edgesImg,threshed
 
-def doThresh(cfg, tub_names,nCrop = 45,nThresh = 127):
+def doThresh(cfg, tub_names,nCrop = 45,nThresh = 127,limit_axes = True):
     nCrop = int(nCrop)
     tubgroup = TubGroup(tub_names)
     tub_paths = utils.expand_path_arg(tub_names)
@@ -65,25 +72,107 @@ def doThresh(cfg, tub_names,nCrop = 45,nThresh = 127):
     raw = record["cam/image_array"]
     print(raw.shape)
     edgesImg,threshed = imProc(raw,nCrop)
+    filledXY, filledA,allXY, allA = findLineMarkers(raw,nCrop,nThresh,doPlot = False)
+    trackImg = runClfImg(raw[nCrop:,:,:],clf_track)
+    coneImg = runClfImg(raw[nCrop:,:,:],clf_cone)
     fig = plt.figure()
-    ax1 = plt.subplot2grid((3,1),(0,0))
-    imPlot1 = ax1.imshow(raw[nCrop:,:,:])
-    ax2 = plt.subplot2grid((3,1),(1,0))
-    #imPlot2 = ax2.imshow(edgesImg)
-    ax3 = plt.subplot2grid((3,1),(2,0))
-    imPlot3 = ax2.imshow(threshed)
-    imPlot2 = ax2.imshow(edgesImg,alpha=0.5)
-    def animate(i):
-        record = tub.get_record(tubInds[i])
-        raw = record["cam/image_array"]
-        edgesImg,threshed = imProc(raw,nCrop,int(nThresh))
+    if limit_axes:
+        ax1 = plt.subplot2grid((1,2),(0,0))
 
-        imPlot1.set_data(raw[nCrop:,:,:])
-        imPlot2.set_data(edgesImg)
-        imPlot3.set_data(threshed)
-        return imPlot1,
-    ani = animation.FuncAnimation(fig, animate, np.arange(1, nRecords),
-                              interval=100, blit=False)
+        ax5 = plt.subplot2grid((1,2),(0,1))
+    else:
+        ax1 = plt.subplot2grid((3,2),(0,0))
+        ax2 = plt.subplot2grid((3,2),(1,0))
+        #imPlot2 = ax2.imshow(edgesImg)
+        ax3 = plt.subplot2grid((3,2),(2,0))
+        ax4 = plt.subplot2grid((3,2),(2,1))
+        ax5 = plt.subplot2grid((3,2),(0,1))
+        ax6 = plt.subplot2grid((3,2),(1,1))
+    imPlot1 = ax1.imshow(raw[nCrop:,:,:])
+    # make a color map of fixed colors
+    cmap = mpl.colors.ListedColormap(['black', 'xkcd:dark gray','xkcd:gray','xkcd:orange'])
+    bounds=[0,0.5,3,6,20]
+    norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+
+    # tell imshow about color map so that only set colors are used
+    trackPlot = ax5.imshow(trackImg*6+coneImg*10, interpolation='nearest',
+                    cmap=cmap, norm=norm)
+
+    #trackPlot = ax5.imshow(trackImg*0.5,cmap="gray",vmax = 1,vmin = 0)
+    #conePlot = ax6.imshow(coneImg)
+    if limit_axes==False:
+        imPlot3 = ax2.imshow(threshed)
+        imPlot2 = ax2.imshow(edgesImg,alpha=0.5)
+    myAlpha=0.2
+    cFilled = 'xkcd:cream'
+    cAll = 'xkcd:blue grey'
+    allPlot, = ax5.plot(allXY[0],allXY[1],linestyle = 'None',marker = '.',color = cAll)
+    filledPlot, = ax5.plot(filledXY[0],filledXY[1],linestyle = 'None',marker = '.',color = cFilled)
+    if limit_axes==False:
+        allPlotX, = ax3.plot(allXY[0],allXY[1],linestyle = 'None',marker = '.',alpha = myAlpha,color = cAll)
+        filledPlotX, = ax3.plot(filledXY[0],filledXY[1],linestyle = 'None',marker = '.',alpha = myAlpha,color = cFilled)
+        filledPlotY, = ax4.plot(filledXY[1],filledA,linestyle = 'None',marker = '.',alpha = myAlpha,color = cFilled)
+        allPlotY, = ax4.plot(allXY[1],allA,linestyle = 'None',marker = '.',alpha = myAlpha,color = cAll)
+
+    height,width = threshed.shape
+    notPatchA = []
+    notPatchXY = [[],[]]
+    isPatchA = []
+    isPatchXY = [[],[]]
+    isPatch2A = []
+    isPatch2XY = [[],[]]
+
+
+    if True:
+        def animate(i):
+            record = tub.get_record(tubInds[i])
+            raw = record["cam/image_array"]
+            imPlot1.set_data(raw[nCrop:,:,:])
+            trackImg = runClfImg(raw[nCrop:,:,:],clf_track)
+            coneImg = runClfImg(raw[nCrop:,:,:],clf_cone)
+            edgesImg,threshed = imProc(raw,nCrop,int(nThresh))
+
+            filledXY, filledA,allXY, allA = findLineMarkers(raw,nCrop,nThresh,doPlot = False)
+            truFilledA = []
+            truFilledXY = [[],[]]
+            for fa,fx,fy in zip(filledA,filledXY[0],filledXY[1]):
+
+                if fa>3 and fy>3:
+                    truFilledA.append(fa)
+                    truFilledXY[0].append(fx)
+                    truFilledXY[1].append(fy)
+            if len(allA)>0:
+                notPatchA.extend(allA)
+                notPatchXY[0].extend(allXY[0])
+                notPatchXY[1].extend(allXY[1])
+            if len(filledA)>0:
+                isPatchA.extend(filledA)
+                isPatchXY[0].extend(filledXY[0])
+                isPatchXY[1].extend(filledXY[1])
+            if len(truFilledA)>0:
+                isPatch2A.extend(truFilledA)
+                isPatch2XY[0].extend(truFilledXY[0])
+                isPatch2XY[1].extend(truFilledXY[1])
+
+
+            if limit_axes==False:
+                imPlot2.set_data(edgesImg)
+                imPlot3.set_data(threshed)
+                allPlotX.set_data(notPatchXY[1],notPatchA)
+                filledPlotX.set_data(isPatchXY[1],isPatchA)
+                allPlotY.set_data(notPatchXY[1],notPatchA)
+                filledPlotY.set_data(isPatchXY[1],isPatchA)
+                ax3.set_ylim(0,50)#max(max(notPatchA),max(notPatchA))*1.2)
+                ax4.set_ylim(0,50)#max(max(notPatchA),max(notPatchA))*1.2)
+                ax3.set_xlim(0,height)
+                ax4.set_xlim(0,height)
+            allPlot.set_data(filledXY[0],filledXY[1])
+            filledPlot.set_data(truFilledXY[0],truFilledXY[1])
+            trackPlot.set_data(threshed*1+trackImg*2+coneImg*10)
+
+            return imPlot1,
+        ani = animation.FuncAnimation(fig, animate, np.arange(1, nRecords),
+                                  interval=100, blit=False)
     plt.show()
 
 
@@ -121,4 +210,4 @@ if __name__ == '__main__':
         tub = args['--tub']
         nCrop = args['--nCrop']
         nThresh = args['--nThresh']
-        doThresh(cfg, tub, nCrop, nThresh)
+        doThresh(cfg, tub, nCrop, int(nThresh))
