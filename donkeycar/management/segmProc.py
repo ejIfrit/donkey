@@ -4,7 +4,7 @@ Look at a tub and process it based on thresholds and extracting road markers
 
 Usage:
     test.py (thresh1) [--tub=<tub1,tub2,..tubn>] [--tubInd=<tubInd>] [--nCrop=<n1>]
-    test.py (thresh) [--tub=<tub1,tub2,..tubn>] [--nCrop=<n1>] [--nThresh=<n1>]
+    test.py (segm) [--tub=<tub1,tub2,..tubn>] [--nCrop=<n1>] [--nThresh=<n1>]
 
 Options:
     -h --help        Show this screen.
@@ -35,33 +35,136 @@ from image_thresholding.get_Markers import findLineMarkers
 from image_thresholding.analyse_masks import runClfImg
 from sklearn.svm import SVC
 from sklearn.externals import joblib
-#import tensorflow as tf
+import tensorflow as tf
+from threshProc import imProc
+from segm.model import Model_fromLoad
 print('imports done')
 
 clf_cone = joblib.load('image_thresholding/cone_RGB_000.pkl')
 clf_track = joblib.load('image_thresholding/track_HSV_000.pkl')
-#sess = tf.Session()
-#new_saver = tf.train.import_meta_graph('my_test_model.meta')
-#new_saver.restore(sess, tf.train.latest_checkpoint('./'))
+batch_size = 1
+dropout = 0.7
+sess = tf.Session()
+sess.run(tf.global_variables_initializer())
+graph = tf.get_default_graph()
+new_saver = tf.train.import_meta_graph('my_test_model_1500.meta')
+new_saver.restore(sess, tf.train.latest_checkpoint('./'))
+model = Model_fromLoad(graph,1,dropout,w = 18,h=40,ndims = 2)
 #M = np.array([[3.48407563   4.68019348  -193.634274], [ -0.0138199636 4.47986683 -38.3089390], [0.0 0.0 1.0]])
 #M=np.array([[-1.3026235852665167, -3.499123877776032, 245.75446559156023], [-0.03176219298555294, -5.213807674195841, 254.91345254435038], [-0.000211747953236998, -0.02383023318793577, 1.0]])
 #M=np.array([[3.4840756328915137, 4.680193479489915, -193.6342735096424], [-0.013819963565551818, 4.479866825805638, -38.308939003706215], [-0.0009213309043700334, 0.06172917059279264, 1.0]])
 #M=np.array([[2.6953954394120174, 4.212827438909477, -140.8803316791254], [-0.01381996356555254, 4.479866825805639, -38.308939003706115], [-0.0009213309043700707, 0.061729170592792676, 1.0]])
 M=np.array([[0.7288447030443173, 5.383427898971357, 9.457197002209224], [-5.551115123125783e-16, 2.8193645731219714, 3.8191672047105385e-14], [-0.0017493890126173033, 0.06997556050469123, 1.0]])
 
-def getThresh(raw,threshLevel=127):
-    gray = cv2.cvtColor(raw, cv2.COLOR_BGR2GRAY)
-    #gray = cv2.normalize(gray, np.array([]),alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
-    gray = cv2.bilateralFilter(gray, 11, 17, 17)
-    ret,threshed = cv2.threshold(gray,threshLevel,1,cv2.THRESH_BINARY_INV)
-    #threshed = 255-threshed
-    return threshed
+def prepForSegm(img1_orig,nCrop=45,nResize=0.25,goGrey=True,addYCoords = True):
+    if nCrop>0:
+        o = img1_orig[nCrop:,:,:]
+    if nResize!=1:
+        height,width,depth = o.shape
+        o = cv2.resize(o,(int(width*nResize),int(height*nResize)))
 
-def imProc(raw,nCrop = 45,threshLevel=127):
-    raw = raw[nCrop:,:,:]
-    edgesImg=getEdges(raw)
-    threshed = getThresh(raw,threshLevel)
-    return edgesImg,threshed
+    if goGrey==True:
+        o = cv2.cvtColor(o, cv2.COLOR_BGR2GRAY)
+    else:
+        o = cv2.cvtColor(o, cv2.COLOR_BGR2RGB)
+    w = o.shape[0]
+    h=o.shape[1]
+    x = np.linspace(0., 255., h)
+    y = np.linspace(0., 255., w)
+    temp, yv = np.meshgrid(x, y)
+    o = np.stack((o,yv),axis=-1)
+    o=(o-130)*(1./70.)
+    return o
+
+
+def doSegm(cfg,tub_names,nCrop=45,nThresh = 127):
+    nCrop = int(nCrop)
+    tubgroup = TubGroup(tub_names)
+    tub_paths = utils.expand_path_arg(tub_names)
+    tubs = [Tub(path) for path in tub_paths]
+    tub = tubs[0]
+    tubInds = tub.get_index(shuffled=False)
+    kTub = 0
+    nRecords = len(tubInds)
+    record = tub.get_record(tubInds[kTub])
+    raw = record["cam/image_array"]
+    fig = plt.figure()
+    ax1 = plt.subplot2grid((1,3),(0,0))
+    ax3 = plt.subplot2grid((1,3),(0,1))
+    ax2 = plt.subplot2grid((1,3),(0,2))
+    o = prepForSegm(raw)
+    o = o[np.newaxis,:,:,:]
+    imPlot1 = ax1.imshow(np.squeeze(o[0,:,:,0]))
+    print(sess.run(graph.get_tensor_by_name("bias1:0")))
+    print(sess.run(graph.get_tensor_by_name("weight1:0"))[0,0,0,:])
+    segm_map_pred_load = sess.run(model.h4, feed_dict={model.image:o})
+    filledXY, filledA,allXY, allA = findLineMarkers(raw,nCrop,nThresh,doPlot = False)
+    trackImg = runClfImg(raw[nCrop:,:,:],clf_track)
+    coneImg = runClfImg(raw[nCrop:,:,:],clf_cone)
+    edgesImg,threshed = imProc(raw,nCrop)
+    cmap = mpl.colors.ListedColormap(['black', 'xkcd:dark gray','xkcd:gray','xkcd:orange'])
+    bounds=[0,0.5,3,6,20]
+    norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+    # tell imshow about color map so that only set colors are used
+    trackPlot = ax2.imshow(threshed*1+trackImg*2+coneImg*10, interpolation='nearest',
+                    cmap=cmap, norm=norm)
+    cFilled = 'xkcd:cream'
+    cAll = 'xkcd:blue grey'
+    allPlot, = ax2.plot(allXY[0],allXY[1],linestyle = 'None',marker = '.',color = cAll)
+    filledPlot, = ax2.plot(filledXY[0],filledXY[1],linestyle = 'None',marker = '.',color = cFilled)
+    frametext = ax1.text(0.1, 0.1, '1', horizontalalignment='center',
+        verticalalignment='center', transform=ax1.transAxes,color='xkcd:light blue')
+    height,width = threshed.shape
+    notPatchA = []
+    notPatchXY = [[],[]]
+    isPatchA = []
+    isPatchXY = [[],[]]
+    isPatch2A = []
+    isPatch2XY = [[],[]]
+    segmPlot = ax3.imshow(np.squeeze(segm_map_pred_load),cmap='gray',vmin=0., vmax=255./145.)
+    if True:
+        def animate(i):
+            record = tub.get_record(tubInds[i])
+            frametext.set_text(str(tubInds[i]))
+            raw = record["cam/image_array"]
+            o = prepForSegm(raw)
+            o = o[np.newaxis,:,:,:]
+            segm_map_pred = sess.run(model.h4, feed_dict={model.image:o})
+            imPlot1.set_data(raw[nCrop:,:,:])
+            trackImg = runClfImg(raw[nCrop:,:,:],clf_track)
+            coneImg = runClfImg(raw[nCrop:,:,:],clf_cone)
+            edgesImg,threshed = imProc(raw,nCrop,int(nThresh))
+
+            filledXY, filledA,allXY, allA = findLineMarkers(raw,nCrop,nThresh,doPlot = False)
+            truFilledA = []
+            truFilledXY = [[],[]]
+            for fa,fx,fy in zip(filledA,filledXY[0],filledXY[1]):
+
+                if fa>3 and fy>3:
+                    truFilledA.append(fa)
+                    truFilledXY[0].append(fx)
+                    truFilledXY[1].append(fy)
+            if len(allA)>0:
+                notPatchA.extend(allA)
+                notPatchXY[0].extend(allXY[0])
+                notPatchXY[1].extend(allXY[1])
+            if len(filledA)>0:
+                isPatchA.extend(filledA)
+                isPatchXY[0].extend(filledXY[0])
+                isPatchXY[1].extend(filledXY[1])
+            if len(truFilledA)>0:
+                isPatch2A.extend(truFilledA)
+                isPatch2XY[0].extend(truFilledXY[0])
+                isPatch2XY[1].extend(truFilledXY[1])
+
+            allPlot.set_data(filledXY[0],filledXY[1])
+            filledPlot.set_data(truFilledXY[0],truFilledXY[1])
+            trackPlot.set_data(threshed*1+trackImg*2+coneImg*10)
+            segmPlot.set_data(np.squeeze(segm_map_pred))
+            return imPlot1,
+        ani = animation.FuncAnimation(fig, animate, np.arange(1, nRecords),
+                                  interval=100, blit=False)
+    plt.show()
 
 def doThresh(cfg, tub_names,nCrop = 45,nThresh = 127,limit_axes = True):
     nCrop = int(nCrop)
@@ -99,7 +202,7 @@ def doThresh(cfg, tub_names,nCrop = 45,nThresh = 127,limit_axes = True):
     norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
 
     # tell imshow about color map so that only set colors are used
-    trackPlot = ax5.imshow(trackImg*6+coneImg*10, interpolation='nearest',
+    trackPlot = ax5.imshow(threshed*1+trackImg*2+coneImg*10, interpolation='nearest',
                     cmap=cmap, norm=norm)
 
     #trackPlot = ax5.imshow(trackImg*0.5,cmap="gray",vmax = 1,vmin = 0)
@@ -181,25 +284,7 @@ def doThresh(cfg, tub_names,nCrop = 45,nThresh = 127,limit_axes = True):
 
 
 def doThresh1shot(cfg, tub, tubInd,nCrop = 45,nThresh = 127):
-    paths = glob.glob(tub+'/*.jpg')
-    print(tub)
-    print(int(tubInd))
-    nCrop = int(nCrop)
-    #print(paths)
-    sys.stdout.flush()
-    fig = plt.figure()
-    raw = cv2.imread(paths[int(tubInd)])
-    edgesImg,threshed = imProc(raw,nCrop)
-    ax1 = plt.subplot2grid((2,2),(0,0))
-    imPlot = ax1.imshow(raw)
-    ax2 = plt.subplot2grid((2,2),(1,0))
-    imPlot = ax2.imshow(edgesImg)
-    ax3 = plt.subplot2grid((2,2),(0,1))
-    imPlot = ax3.imshow(threshed)
-    ax2 = plt.subplot2grid((2,2),(1,0))
-    imPlot = ax2.imshow(edgesImg)
-
-    plt.show()
+    pass
 
 if __name__ == '__main__':
     args = docopt(__doc__)
@@ -210,8 +295,8 @@ if __name__ == '__main__':
         tubInd = args['--tubInd']
         nCrop = args['--nCrop']
         doThresh1shot(cfg, tub, tubInd,nCrop)
-    if args['thresh']:
+    if args['segm']:
         tub = args['--tub']
         nCrop = args['--nCrop']
         nThresh = args['--nThresh']
-        doThresh(cfg, tub, nCrop, int(nThresh))
+        doSegm(cfg, tub, nCrop, int(nThresh))

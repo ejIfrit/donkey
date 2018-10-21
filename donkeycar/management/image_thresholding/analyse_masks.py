@@ -93,7 +93,54 @@ def analyseMasks(fileName,isCone,rgb = True,doPlot = True):
             plt.show()
         return img1_orig,masked_data_orig,unmasked_data_orig
 
+def loadMasks(fileName,isCone,rgb = True,nCrop = 0,nResize = 1,goGrey = False):
+    if isCone == False:
+        fileStub = '_mask'
+    else:
+        fileStub = '_cones'
+    if '.jpg' in fileName:
+        temp  = fileName.replace('.jpg','')
+        fileName = temp
+    if not os.path.isfile(fileName+'.jpg'):
+        print('no file with that name')
+        return
+    elif os.path.isfile(fileName+fileStub+'.jpg') and os.path.isfile(fileName+fileStub+'.npy'):
+        print('lets go')
 
+        myMask = np.load(fileName+fileStub+'.npy')
+        img1_orig = cv2.imread((fileName+'.jpg'))
+        img1_disp = cv2.imread((fileName+'.jpg'))
+        img1_disp = cv2.cvtColor(img1_disp, cv2.COLOR_BGR2RGB)
+        if nCrop>0:
+            img1_orig = img1_orig[nCrop:,:,:]
+            img1_disp = img1_disp[nCrop:,:,:]
+            myMask = myMask[nCrop:,:]
+        if nResize!=1:
+            height,width,depth = img1_orig.shape
+            img1_orig = cv2.resize(img1_orig,(int(width*nResize),int(height*nResize)))
+            myMask = cv2.resize(myMask,(int(width*nResize),int(height*nResize)))
+
+
+        img1 = cv2.cvtColor(img1_orig, cv2.COLOR_BGR2RGB)
+
+        if goGrey==True:
+            img1_orig = cv2.cvtColor(img1_orig, cv2.COLOR_BGR2GRAY)
+        else:
+            img1_orig = cv2.cvtColor(img1_orig, cv2.COLOR_BGR2RGB)
+        masked_data = cv2.bitwise_and(img1, img1, mask=myMask)
+        masked_data_orig = cv2.bitwise_and(img1_orig, img1_orig, mask=myMask)
+        unmasked_data_orig = cv2.bitwise_and(img1_orig, img1_orig, mask=1-myMask)
+        masked_data2 = cv2.bitwise_and(img1, img1, mask=1-myMask)
+        height,width,depth = img1.shape
+        output1 = np.zeros((height,width), np.uint8)
+        output2 = np.zeros((height,width), np.uint8)
+
+
+        #cv2.inRange(img1, np.array([169, 10, 100]), np.array([183, 48, 145]), output1)
+        #cv2.inRange(img1, np.array([0, 50, 100]), np.array([10, 160, 200]), output2)
+        cv2.inRange(img1, np.array([169, 0, 0]), np.array([183, 255, 255]), output1)
+        cv2.inRange(img1, np.array([0, 0, 0]), np.array([10, 255, 255]), output2)
+        return img1_orig,myMask,img1_disp
 
 
 def analyseFolder(folderName = "testImages",isCone = True,doPlot = True,doHSV = True,nCrop = 0):
