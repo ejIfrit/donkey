@@ -1,0 +1,3 @@
+model_checkpoint_path: "500_run002_2018102620101540555665_best"
+all_model_checkpoint_paths: "500_run002_2018102620101540555665_time"
+all_model_checkpoint_paths: "500_run002_2018102620101540555665_best"

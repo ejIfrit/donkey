@@ -3,7 +3,7 @@
 Look at a file and see if a mask exists for it. If not, draw it.
 
 Usage:
-    test.py (draw) [--fileName=<fn>] [--nCrop=<n1>] [--nThresh=<n1>] [--coneDraw]
+    test.py (draw) [--fileName=<fn>] [--nCrop=<n1>] [--nThresh=<n1>] [--coneDraw] [--lineDraw] [--ylineDraw]
 
 Options:
     -h --help        Show this screen.
@@ -17,12 +17,19 @@ import matplotlib as mpl
 mpl.use('TkAgg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-def drawMask(fileName = 'testImg2',nCrop = 0, coneDraw = False):
+def drawMask(fileName = 'testImg2',nCrop = 0, coneDraw = False, lineDraw = False, ylineDraw = False):
     drawing = False
+    maskDraw = False
+    if coneDraw == False and lineDraw == False and ylineDraw == False:
+        maskDraw = True
     if coneDraw == False:
         fileStub = '_mask'
     else:
         fileStub = '_cones'
+    if lineDraw:
+        fileStub = '_line'
+    if ylineDraw:
+        fileStub = '_yline'
     # mouse callback function
     def draw_circle(event,x,y,flags,param):
         global drawing,mode
@@ -31,8 +38,8 @@ def drawMask(fileName = 'testImg2',nCrop = 0, coneDraw = False):
             #ix,iy = x,y
         elif event == cv2.EVENT_MOUSEMOVE:
             if drawing == True:
-                cv2.circle(img2,(x,y),4,(255,0,0),-1)
-                cv2.circle(myMask,(x,y),4,1,-1)
+                cv2.circle(img2,(x,y),2,(255,0,0),-1)
+                cv2.circle(myMask,(x,y),2,1,-1)
         elif event == cv2.EVENT_LBUTTONUP:
             drawing = False
         elif cv2.EVENT_LBUTTONDBLCLK:
@@ -103,7 +110,7 @@ def drawMask(fileName = 'testImg2',nCrop = 0, coneDraw = False):
 
         cv2.namedWindow('image',cv2.WINDOW_NORMAL)
         cv2.imshow('image',img1)
-        if coneDraw:
+        if not maskDraw:
             cv2.setMouseCallback('image',draw_circleSmall)
         else:
             cv2.setMouseCallback('image',draw_circle)
@@ -154,12 +161,18 @@ if __name__ == '__main__':
     args = docopt(__doc__)
     print(args)
     cd = False
+    ld = False
+    yld = False
     if args['--coneDraw']:
         cd = True
+    if args['--lineDraw']:
+        ld = True
+    if args['--ylineDraw']:
+        yld = True
     if args['--fileName']:
     #    tub = args['--tub']
     #    tubInd = args['--tubInd']
     #    nCrop = args['--nCrop']
-        drawMask(args['--fileName'],coneDraw = cd)
+        drawMask(args['--fileName'],coneDraw = cd,lineDraw = ld, ylineDraw = yld)
     if args['--fileName'] and args['--nCrop']:
-        drawMask(args['--fileName'],int(args['--nCrop']),coneDraw = cd)
+        drawMask(args['--fileName'],int(args['--nCrop']),coneDraw = cd,lineDraw = ld, ylineDraw = yld)

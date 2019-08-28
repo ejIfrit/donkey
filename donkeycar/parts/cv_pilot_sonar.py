@@ -6,10 +6,11 @@ import donkeycar as dk
 
 from donkeycar.parts.cv_pilot import clip, lineController
 
-        
+
 class lineControllerSonar(lineController):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, cutoff=40,*args, **kwargs):
         lineController.__init__(self, *args, **kwargs)
+        self.cutoff=cutoff
     def run(self,angleIn,interceptIn,distIn):
         if angleIn is not None:
             angle_intercept1 = (interceptIn-self.dIntercept)*self.kIntercept
@@ -19,17 +20,12 @@ class lineControllerSonar(lineController):
             self.lastIntercept = interceptIn
             self.lastAngleOut =angle_unbinned
         else:
-            angle_unbinned = self.lastAngleOut
-        throttle = 0.5
-        if distIn<20:
+            angle_unbinned = self.lastAngleOut*0.5
+            self.lastAngleOut =angle_unbinned
+        throttle = 1.0
+        if distIn<self.cutoff:
             throttle = 0.
         print('throttle'+str(throttle))
         return angle_unbinned, throttle
     def shutdown(self):
-        pass 
-            
-            
-        
-        
-        
-        
+        pass

@@ -1,0 +1,3 @@
+model_checkpoint_path: "1000_run002_2018102621101540559077_time"
+all_model_checkpoint_paths: "1000_run002_2018102621101540559077_best"
+all_model_checkpoint_paths: "1000_run002_2018102621101540559077_time"

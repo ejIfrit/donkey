@@ -4,7 +4,7 @@ Look at a tub and process it based on thresholds and extracting road markers
 
 Usage:
     test.py (thresh1) [--tub=<tub1,tub2,..tubn>] [--tubInd=<tubInd>] [--nCrop=<n1>]
-    test.py (segm) [--tub=<tub1,tub2,..tubn>] [--nCrop=<n1>] [--nThresh=<n1>]
+    test.py (segm) [--tub=<tub1,tub2,..tubn>] [--nCrop=<n1>] [--nThresh=<n1>] [--modelDir=<d1>]
 
 Options:
     -h --help        Show this screen.
@@ -48,16 +48,14 @@ dropout = 0.7
 sess = tf.Session()
 sess.run(tf.global_variables_initializer())
 graph = tf.get_default_graph()
-new_saver = tf.train.import_meta_graph('1000_run002_2018102621101540559077_time.meta')
-new_saver.restore(sess, tf.train.latest_checkpoint('./'))
-model = Model_fromLoad(graph,1,dropout,w = 18,h=40,ndims = 2)
+
 #M = np.array([[3.48407563   4.68019348  -193.634274], [ -0.0138199636 4.47986683 -38.3089390], [0.0 0.0 1.0]])
 #M=np.array([[-1.3026235852665167, -3.499123877776032, 245.75446559156023], [-0.03176219298555294, -5.213807674195841, 254.91345254435038], [-0.000211747953236998, -0.02383023318793577, 1.0]])
 #M=np.array([[3.4840756328915137, 4.680193479489915, -193.6342735096424], [-0.013819963565551818, 4.479866825805638, -38.308939003706215], [-0.0009213309043700334, 0.06172917059279264, 1.0]])
 #M=np.array([[2.6953954394120174, 4.212827438909477, -140.8803316791254], [-0.01381996356555254, 4.479866825805639, -38.308939003706115], [-0.0009213309043700707, 0.061729170592792676, 1.0]])
 M=np.array([[0.7288447030443173, 5.383427898971357, 9.457197002209224], [-5.551115123125783e-16, 2.8193645731219714, 3.8191672047105385e-14], [-0.0017493890126173033, 0.06997556050469123, 1.0]])
 
-def prepForSegm(img1_orig,nCrop=45,nResize=0.25,goGrey=True,addYCoords = True):
+def prepForSegm(img1_orig,nCrop=45,nResize=0.5,goGrey=True,addYCoords = True):
     if nCrop>0:
         o = img1_orig[nCrop:,:,:]
     if nResize!=1:
@@ -78,7 +76,12 @@ def prepForSegm(img1_orig,nCrop=45,nResize=0.25,goGrey=True,addYCoords = True):
     return o
 
 
-def doSegm(cfg,tub_names,nCrop=45,nThresh = 127):
+def doSegm(cfg,tub_names,nCrop=45,nThresh = 127,modelDir=''):
+    modelPath = 'models/'+modelDir+'/'
+    modelToLoad = glob.glob(modelPath+'/'+'*.meta')
+    new_saver = tf.train.import_meta_graph(modelToLoad[0])
+    new_saver.restore(sess, tf.train.latest_checkpoint(modelPath))
+    model = Model_fromLoad(graph,1,dropout,w = 37,h=80,ndims = 2)
     nCrop = int(nCrop)
     tubgroup = TubGroup(tub_names)
     tub_paths = utils.expand_path_arg(tub_names)
@@ -314,4 +317,5 @@ if __name__ == '__main__':
         tub = args['--tub']
         nCrop = args['--nCrop']
         nThresh = args['--nThresh']
-        doSegm(cfg, tub, nCrop, int(nThresh))
+        modelDir = args['--modelDir']
+        doSegm(cfg, tub, nCrop, int(nThresh),modelDir)
