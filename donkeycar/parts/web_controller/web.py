@@ -14,9 +14,9 @@ The client and web server needed to control a car remotely.
 import os
 import json
 import time
+import asyncio
 
 import requests
-
 import tornado.ioloop
 import tornado.web
 import tornado.gen
@@ -97,6 +97,9 @@ class RemoteWebServer():
         recording = bool(data['recording'])
         
         return angle, throttle, drive_mode, recording
+
+    def shutdown(self):
+        pass
     
     
 class LocalWebController(tornado.web.Application):
@@ -130,11 +133,11 @@ class LocalWebController(tornado.web.Application):
 
     def update(self, port=8887):
         ''' Start the tornado webserver. '''
+        asyncio.set_event_loop(asyncio.new_event_loop())
         print(port)
         self.port = int(port)
         self.listen(self.port)
         tornado.ioloop.IOLoop.instance().start()
-
 
     def run_threaded(self, img_arr=None):
         self.img_arr = img_arr
@@ -143,6 +146,9 @@ class LocalWebController(tornado.web.Application):
     def run(self, img_arr=None):
         self.img_arr = img_arr
         return self.angle, self.throttle, self.mode, self.recording
+
+    def shutdown(self):
+        pass
 
 
 class DriveAPI(tornado.web.RequestHandler):
@@ -168,15 +174,12 @@ class VideoAPI(tornado.web.RequestHandler):
     '''
     Serves a MJPEG of the images posted from the vehicle. 
     '''
-    @tornado.web.asynchronous
-    @tornado.gen.coroutine
-    def get(self):
+    async def get(self):
 
-        ioloop = tornado.ioloop.IOLoop.current()
         self.set_header("Content-type", "multipart/x-mixed-replace;boundary=--boundarydonotcross")
 
         self.served_image_timestamp = time.time()
-        my_boundary = "--boundarydonotcross"
+        my_boundary = "--boundarydonotcross\n"
         while True:
             
             interval = .1
@@ -190,6 +193,9 @@ class VideoAPI(tornado.web.RequestHandler):
                 self.write("Content-length: %s\r\n\r\n" % len(img)) 
                 self.write(img)
                 self.served_image_timestamp = time.time()
-                yield tornado.gen.Task(self.flush)
+                try:
+                    await self.flush()
+                except tornado.iostream.StreamClosedError:
+                    pass
             else:
-                yield tornado.gen.Task(ioloop.add_timeout, ioloop.time() + interval)
+                await tornado.gen.sleep(interval)

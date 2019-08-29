@@ -16,121 +16,6 @@ import numpy as np
 import pandas as pd
 
 from PIL import Image
-from donkeycar import utils
-
-
-class OriginalWriter:
-    """
-    TODO: DELTE THIS? Is this ever used now?
-    A datastore to store sensor data in the original `filename format' and a *.json
-    file with the same index.
-
-    Accepts str, int, float, image_array, image, and array data types.
-
-    """
-
-    def __init__(self, path, inputs = None, types = None):
-        self.path = os.path.expanduser(path)
-        self.current_ix = 0
-
-        exists = os.path.exists(self.path)
-
-
-        if exists:
-            # XXX: Find the biggest index and use that to continue.
-            pass
-        elif not exists and inputs and types:
-            os.makedirs(self.path)
-
-            meta_inputs = []
-            meta_types = []
-            for i, v in enumerate(types):
-                if v != 'boolean':
-                    meta_inputs.append(inputs[i])
-                    meta_types.append(v)
-
-            self.orig = { 'inputs': inputs, 'types': types }
-            self.meta = { 'inputs': meta_inputs, 'types': meta_types }
-            self.current_ix = 0
-        else:
-            raise AttributeError('The path doesnt exist and you didnt give inputs and types')
-
-        self.start_time = time.time()
-
-    def make_img_path(self, ext = '.jpg'):
-        name = "frame_%.5d_ttl_%.3f_agl_%.3f_mil_%.1f%s" % (self.current_ix, self.out['trottle'], self.out['angle'], self.out['milliseconds'], ext)
-        file_path = os.path.join(self.path, name)
-        return file_path
-
-    def make_json_path(self):
-        name = "frame_%.5d.json" % self.current_ix
-        file_path = os.path.join(self.path, name)
-        return file_path
-
-    def run(self, *args):
-        '''
-        API function needed to use as a Donkey part.
-
-        Accepts values, pairs them with their inputs keys and saves them
-        to disk.
-        '''
-        assert len(self.orig['inputs']) == len(args)
-
-        t = time.time()
-        self.record_time = (t - self.start_time) * 1000
-
-        write = False
-        self.out = { 'extra': {} }
-
-        for i, val in enumerate(args):
-            typ = self.orig['types'][i]
-            key = self.orig['inputs'][i]
-
-            if typ == 'boolean':      # the recording value
-                write = val
-
-        if write:
-            self.out['milliseconds'] = self.record_time
-            self.out['extra']['linaccel'] = None
-            img = None
-
-            for i, val in enumerate(args):
-                typ = self.orig['types'][i]
-                key = self.orig['inputs'][i]
-
-                if typ in [ 'float' ]:
-                    if key == 'user/angle':
-                        self.out['angle'] = val
-                    elif key == 'user/throttle':
-                        self.out['trottle'] = val
-                    elif key == 'odo/speed':
-                        self.out['extra']['speed'] = val
-                elif typ is 'str':
-                    if key == 'user/mode':
-                        self.out['extra']['mode'] = val
-                elif typ == 'image_array':
-                    img = Image.fromarray(np.uint8(val))
-                elif typ == 'boolean':
-                    pass
-                else:
-                    msg = 'OriginalWriter does not know what to do with this type {}'.format(typ)
-                    raise TypeError(msg)
-
-            if img != None:
-                path = self.make_img_path()
-                img.save(path, 'jpeg')
-
-                path = self.make_json_path()
-                f = open(path, 'w')
-                self.out['extra']['time'] = (time.time() - t) * 1000
-                json.dump(self.out, f)
-                f.close()
-                self.current_ix += 1
-
-    def shutdown(self):
-        pass
-
-
 
 
 class Tub(object):
@@ -149,38 +34,64 @@ class Tub(object):
 
     """
 
-    def __init__(self, path, inputs=None, types=None):
+    def __init__(self, path, inputs=None, types=None, user_meta=[]):
 
         self.path = os.path.expanduser(path)
-        print('path_in_tub:', self.path)
+        #print('path_in_tub:', self.path)
         self.meta_path = os.path.join(self.path, 'meta.json')
+        self.exclude_path = os.path.join(self.path, "exclude.json")
         self.df = None
 
         exists = os.path.exists(self.path)
 
         if exists:
             #load log and meta
-            print("Tub exists: {}".format(self.path))
-            with open(self.meta_path, 'r') as f:
-                self.meta = json.load(f)
-            self.current_ix = self.get_last_ix() + 1
+            #print("Tub exists: {}".format(self.path))
+            try:
+                with open(self.meta_path, 'r') as f:
+                    self.meta = json.load(f)
+            except FileNotFoundError:
+                self.meta = {'inputs': [], 'types': []}
+
+            try:
+                with open(self.exclude_path,'r') as f:
+                    excl = json.load(f) # stored as a list
+                    self.exclude = set(excl)
+            except FileNotFoundError:
+                self.exclude = set()
+
+            try:
+                self.current_ix = self.get_last_ix() + 1
+            except ValueError:
+                self.current_ix = 0
+
+            if 'start' in self.meta:
+                self.start_time = self.meta['start']
+            else:
+                self.start_time = time.time()
+                self.meta['start'] = self.start_time
 
         elif not exists and inputs:
             print('Tub does NOT exist. Creating new tub...')
+            self.start_time = time.time()
             #create log and save meta
             os.makedirs(self.path)
-            self.meta = {'inputs': inputs, 'types': types}
+            self.meta = {'inputs': inputs, 'types': types, 'start': self.start_time}
+            for kv in user_meta:
+                kvs = kv.split(":")
+                if len(kvs) == 2:
+                    self.meta[kvs[0]] = kvs[1]
+                # else exception? print message?
             with open(self.meta_path, 'w') as f:
                 json.dump(self.meta, f)
             self.current_ix = 0
+            self.exclude = set()
             print('New tub created at: {}'.format(self.path))
         else:
             msg = "The tub path you provided doesn't exist and you didnt pass any meta info (inputs & types)" + \
                   "to create a new tub. Please check your tub path or provide meta info to create a new tub."
 
             raise AttributeError(msg)
-
-        self.start_time = time.time()
 
 
     def get_last_ix(self):
@@ -200,7 +111,7 @@ class Tub(object):
     def get_index(self, shuffled=True):
         files = next(os.walk(self.path))[2]
         record_files = [f for f in files if f[:6]=='record']
-        
+
         def get_file_ix(file_name):
             try:
                 name = file_name.split('.')[0]
@@ -210,13 +121,13 @@ class Tub(object):
             return num
 
         nums = [get_file_ix(f) for f in record_files]
-        
+
         if shuffled:
             random.shuffle(nums)
         else:
             nums = sorted(nums)
-            
-        return nums 
+
+        return nums
 
 
     @property
@@ -303,11 +214,15 @@ class Tub(object):
         """
         json_data = {}
         self.current_ix += 1
-        
+
         for key, val in data.items():
             typ = self.get_input_type(key)
 
-            if typ in ['str', 'float', 'int', 'boolean']:
+            if (val is not None) and (typ == 'float'):
+                # in case val is a numpy.float32, which json doesn't like
+                json_data[key] = float(val)
+
+            elif typ in ['str', 'float', 'int', 'boolean', 'vector']:
                 json_data[key] = val
 
             elif typ is 'image':
@@ -325,9 +240,34 @@ class Tub(object):
                 msg = 'Tub does not know what to do with this type {}'.format(typ)
                 raise TypeError(msg)
 
+        json_data['milliseconds'] = int((time.time() - self.start_time) * 1000)
+
         self.write_json_record(json_data)
         return self.current_ix
 
+    def erase_last_n_records(self, num_erase):
+        '''
+        erase N records from the disc and move current back accordingly
+        '''
+        last_erase = self.current_ix
+        first_erase = last_erase - num_erase
+        self.current_ix = first_erase - 1
+        if self.current_ix < 0:
+            self.current_ix = 0
+
+        for i in range(first_erase, last_erase):
+            if i < 0:
+                continue
+            self.erase_record(i)
+
+    def erase_record(self, i):
+        json_path = self.get_json_record_path(i)
+        if os.path.exists(json_path):
+            os.unlink(json_path)
+        img_filename = '%d_cam-image_array_.jpg' % (i)
+        img_path = os.path.join(self.path, img_filename)
+        if os.path.exists(img_path):
+            os.unlink(img_path)
 
     def get_json_record_path(self, ix):
         return os.path.join(self.path, 'record_'+str(ix)+'.json')
@@ -373,6 +313,15 @@ class Tub(object):
         return data
 
 
+    def gather_records(self):
+        ri = lambda fnm : int( os.path.basename(fnm).split('_')[1].split('.')[0] )
+
+        record_paths = glob.glob(os.path.join(self.path, 'record_*.json'))
+        if len(self.exclude) > 0:
+            record_paths = [f for f in record_paths if ri(f) not in self.exclude]
+        record_paths.sort(key=ri)
+        return record_paths
+
     def make_file_name(self, key, ext='.png'):
         name = '_'.join([str(self.current_ix), key, ext])
         name = name = name.replace('/', '-')
@@ -387,6 +336,27 @@ class Tub(object):
         pass
 
 
+    def excluded(self, index):
+        return index in self.exclude
+
+    def exclude_index(self, index):
+        self.exclude.add(index)
+
+    def include_index(self, index):
+        try:
+            self.exclude.remove(index)
+        except:
+            pass
+
+    def write_exclude(self):
+        if 0 == len(self.exclude):
+            # If the exclude set is empty don't leave an empty file around.
+            if os.path.exists(self.exclude_path):
+                os.unlink(self.exclude_path)
+        else:
+            with open(self.exclude_path,'w') as f:
+                json.dump( list(self.exclude), f )
+
     def get_record_gen(self, record_transform=None, shuffle=True, df=None):
 
         if df is None:
@@ -394,9 +364,11 @@ class Tub(object):
 
 
         while True:
-            for row in self.df.iterrows():
+            for _, row in self.df.iterrows():
                 if shuffle:
                     record_dict = df.sample(n=1).to_dict(orient='record')[0]
+                else:
+                    record_dict = row
 
                 if record_transform:
                     record_dict = record_transform(record_dict)
@@ -472,6 +444,7 @@ class TubWriter(Tub):
         self.record_time = int(time.time() - self.start_time)
         record = dict(zip(self.inputs, args))
         self.put_record(record)
+        return self.current_ix
 
 
 class TubReader(Tub):
@@ -519,22 +492,22 @@ class TubHandler():
         tub_path = os.path.join(self.path, name)
         return tub_path
 
-    def new_tub_writer(self, inputs, types):
+    def new_tub_writer(self, inputs, types, user_meta=[]):
         tub_path = self.create_tub_path()
-        tw = TubWriter(path=tub_path, inputs=inputs, types=types)
+        tw = TubWriter(path=tub_path, inputs=inputs, types=types, user_meta=user_meta)
         return tw
 
 
 
 class TubImageStacker(Tub):
     '''
-    A Tub for training a NN with images that are the last three records stacked 
+    A Tub for training a NN with images that are the last three records stacked
     togther as 3 channels of a single image. The idea is to give a simple feedforward
     NN some chance of building a model based on motion.
     If you drive with the ImageFIFO part, then you don't need this.
     Just make sure your inference pass uses the ImageFIFO that the NN will now expect.
     '''
-    
+
     def rgb2gray(self, rgb):
         '''
         take a numpy rgb image return a new single channel image converted to greyscale
@@ -551,7 +524,7 @@ class TubImageStacker(Tub):
         gray_a = self.rgb2gray(img_a)
         gray_b = self.rgb2gray(img_b)
         gray_c = self.rgb2gray(img_c)
-        
+
         img_arr = np.zeros([width, height, 3], dtype=np.dtype('B'))
 
         img_arr[...,0] = np.reshape(gray_a, (width, height))
@@ -589,7 +562,7 @@ class TubImageStacker(Tub):
 
 class TubTimeStacker(TubImageStacker):
     '''
-    A Tub for training N with records stacked through time. 
+    A Tub for training N with records stacked through time.
     The idea here is to force the network to learn to look ahead in time.
     Init with an array of time offsets from the current time.
     '''
@@ -603,7 +576,7 @@ class TubTimeStacker(TubImageStacker):
         '''
         super(TubTimeStacker, self).__init__(*args, **kwargs)
         self.frame_list = frame_list
-  
+
     def get_record(self, ix):
         '''
         stack the N records into a single record.
@@ -613,7 +586,7 @@ class TubTimeStacker(TubImageStacker):
         data = {}
         for i, iOffset in enumerate(self.frame_list):
             iRec = ix + iOffset
-            
+
             try:
                 json_data = self.get_json_record(iRec)
             except FileNotFoundError:
@@ -627,7 +600,7 @@ class TubTimeStacker(TubImageStacker):
                 #load only the first image saved as separate files
                 if typ == 'image' and i == 0:
                     val = Image.open(os.path.join(self.path, val))
-                    data[key] = val                    
+                    data[key] = val
                 elif typ == 'image_array' and i == 0:
                     d = super(TubTimeStacker, self).get_record(ix)
                     data[key] = d[key]
@@ -642,9 +615,8 @@ class TubTimeStacker(TubImageStacker):
 
 
 class TubGroup(Tub):
-    def __init__(self, tub_paths_arg):
-        tub_paths = utils.expand_path_arg(tub_paths_arg)
-        print('TubGroup:tubpathsarg:',tub_paths_arg)
+    def __init__(self, tub_paths):
+        tub_paths = self.resolve_tub_paths(tub_paths)
         print('TubGroup:tubpaths:', tub_paths)
         sys.stdout.flush()
         tubs = [Tub(path) for path in tub_paths]
@@ -666,3 +638,20 @@ class TubGroup(Tub):
         self.df = pd.concat([t.df for t in tubs], axis=0, join='inner')
 
 
+
+    def find_tub_paths(self, path):
+        matches = []
+        path = os.path.expanduser(path)
+        for file in glob.glob(path):
+            if os.path.isdir(file):
+                matches.append(os.path.join(os.path.abspath(file)))
+        return matches
+
+
+    def resolve_tub_paths(self, path_list):
+        path_list = path_list.split(",")
+        resolved_paths = []
+        for path in path_list:
+            paths = self.find_tub_paths(path)
+            resolved_paths += paths
+        return resolved_paths

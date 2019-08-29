@@ -1,4 +1,4 @@
-__version__ = '2.2.1'
+__version__ = '3.1.0'
 
 print('using donkey v{} ...'.format(__version__))
 
@@ -13,4 +13,5 @@ from .vehicle import Vehicle
 from .memory import Memory
 from . import utils
 from . import config
+from . import contrib
 from .config import load_config

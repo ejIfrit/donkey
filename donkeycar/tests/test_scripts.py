@@ -15,7 +15,7 @@ def is_error(err):
 
 @pytest.fixture
 def cardir(tmpdir):
-    path = str(tmpdir.mkdir("d2"))
+    path = str(tmpdir.mkdir("mycar"))
     return path
 
 
@@ -23,7 +23,6 @@ def test_createcar(cardir):
     cmd = ['donkey', 'createcar', '--path', cardir]
     out, err, proc_id = utils.run_shell_command(cmd)
     assert is_error(err) is False
-
 
 def test_drivesim(cardir):
     cmd = ['donkey', 'createcar', '--path', cardir ,'--template', 'square']
