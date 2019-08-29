@@ -12,7 +12,7 @@ class AStarSpeed:
         self.speed = 0
         self.linaccel = None
 
-        self.sensor = TeensyRCin(0);
+        self.sensor = TeensyRCin(0)
 
         self.on = True
 
@@ -67,9 +67,9 @@ class AStarSpeed:
 
 
 class RotaryEncoder():
-    def __init__(self, mm_per_tick=0.306096, pin=27, poll_delay=0.0166, debug=False):
+    def __init__(self, mm_per_tick=0.306096, pin=13, poll_delay=0.0166, debug=False):
         import RPi.GPIO as GPIO
-        GPIO.setmode(GPIO.BCM)
+        GPIO.setmode(GPIO.BOARD)
         GPIO.setup(pin, GPIO.IN)
         GPIO.add_event_detect(pin, GPIO.RISING, callback=self.isr)
 
@@ -82,6 +82,8 @@ class RotaryEncoder():
         self.counter = 0
         self.on = True
         self.debug = debug
+        self.top_speed = 0
+        self.prev_dist = 0.
     
     def isr(self, channel):
         self.counter += 1
@@ -107,6 +109,8 @@ class RotaryEncoder():
             #update the odometer values
             self.meters += distance
             self.meters_per_second = velocity
+            if(self.meters_per_second > self.top_speed):
+                self.top_speed = self.meters_per_second
 
             #console output for debugging
             if(self.debug):
@@ -120,14 +124,17 @@ class RotaryEncoder():
             time.sleep(self.poll_delay)
 
     def run_threaded(self):
-        return self.meters, self.meters_per_second
+        delta = self.meters - self.prev_dist
+        self.prev_dist = self.meters
+        return self.meters, self.meters_per_second, delta
 
     def shutdown(self):
         # indicate that the thread should be stopped
         self.on = False
-        print('stopping Rotary Encoder')
-        print('top speed (m/s):', self.top_speed)
+        print('Stopping Rotary Encoder')
+        print("\tDistance Travelled: {} meters".format(round(self.meters, 4)))
+        print("\tTop Speed: {} meters/second".format(round(self.top_speed, 4)))
         time.sleep(.5)
         
         import RPi.GPIO as GPIO
-        GPIO.cleanup() 
+        GPIO.cleanup()
