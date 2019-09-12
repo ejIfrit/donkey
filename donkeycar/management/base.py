@@ -1,4 +1,12 @@
+"""
+Terminal commands for driving and training a donkey car
+E.J edits- add extra command 'Jenson' which then allows extra set of
+custom commands to be run from the timeline
 
+usage: donkey createcar (use one argument from the list of original commands)
+       donkey jenson playback (activate custom commands using the jenson keyword
+       followed by the name of a custom command)
+"""
 import sys
 import os
 import socket
@@ -12,6 +20,7 @@ from donkeycar.parts.datastore import Tub
 from donkeycar.utils import *
 from donkeycar.management.tub import TubManager
 from donkeycar.management.joystick_creator import CreateJoystick
+from donkeycar.management.base_jenson import *
 import numpy as np
 
 PACKAGE_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -51,20 +60,20 @@ class BaseCommand(object):
 
 
 class CreateCar(BaseCommand):
-    
+
     def parse_args(self, args):
         parser = argparse.ArgumentParser(prog='createcar', usage='%(prog)s [options]')
         parser.add_argument('--path', default=None, help='path where to create car folder')
         parser.add_argument('--template', default=None, help='name of car template to use')
         parser.add_argument('--overwrite', action='store_true', help='should replace existing files')
-        
+
         parsed_args = parser.parse_args(args)
         return parsed_args
-        
+
     def run(self, args):
         args = self.parse_args(args)
         self.create_car(path=args.path, template=args.template, overwrite=args.overwrite)
-    
+
     def create_car(self, path, template='complete', overwrite=False):
         """
         This script sets up the folder structure for donkey to work.
@@ -79,13 +88,13 @@ class CreateCar(BaseCommand):
 
         print("Creating car folder: {}".format(path))
         path = make_dir(path)
-        
+
         print("Creating data & model folders.")
         folders = ['models', 'data', 'logs']
-        folder_paths = [os.path.join(path, f) for f in folders]   
+        folder_paths = [os.path.join(path, f) for f in folders]
         for fp in folder_paths:
             make_dir(fp)
-            
+
         #add car application and config files if they don't exist
         app_template_path = os.path.join(TEMPLATES_PATH, template+'.py')
         config_template_path = os.path.join(TEMPLATES_PATH, 'cfg_' + template + '.py')
@@ -95,19 +104,19 @@ class CreateCar(BaseCommand):
         car_config_path = os.path.join(path, 'config.py')
         mycar_config_path = os.path.join(path, 'myconfig.py')
         train_app_path = os.path.join(path, 'train.py')
-        
+
         if os.path.exists(car_app_path) and not overwrite:
             print('Car app already exists. Delete it and rerun createcar to replace.')
         else:
             print("Copying car application template: {}".format(template))
             shutil.copyfile(app_template_path, car_app_path)
-            
+
         if os.path.exists(car_config_path) and not overwrite:
             print('Car config already exists. Delete it and rerun createcar to replace.')
         else:
             print("Copying car config defaults. Adjust these before starting your car.")
             shutil.copyfile(config_template_path, car_config_path)
- 
+
         if os.path.exists(train_app_path) and not overwrite:
             print('Train already exists. Delete it and rerun createcar to replace.')
         else:
@@ -124,12 +133,12 @@ class CreateCar(BaseCommand):
             for line in cfg:
                 if "import os" in line:
                     copy = True
-                if copy: 
+                if copy:
                     mcfg.write("# " + line)
             cfg.close()
             mcfg.close()
 
- 
+
         print("Donkey setup complete.")
 
 
@@ -142,34 +151,34 @@ class UpdateCar(BaseCommand):
         parser = argparse.ArgumentParser(prog='update', usage='%(prog)s [options]')
         parsed_args = parser.parse_args(args)
         return parsed_args
-        
+
     def run(self, args):
         cc = CreateCar()
         cc.create_car(path=".", overwrite=True)
-        
+
 
 class FindCar(BaseCommand):
     def parse_args(self, args):
-        pass        
+        pass
 
-        
+
     def run(self, args):
         print('Looking up your computer IP address...')
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8",80))
-        ip = s.getsockname()[0] 
+        ip = s.getsockname()[0]
         print('Your IP address: %s ' %s.getsockname()[0])
         s.close()
-        
+
         print("Finding your car's IP address...")
         cmd = "sudo nmap -sP " + ip + "/24 | awk '/^Nmap/{ip=$NF}/B8:27:EB/{print ip}'"
         print("Your car's ip address is:" )
         os.system(cmd)
-        
-        
-        
-class CalibrateCar(BaseCommand):    
-    
+
+
+
+class CalibrateCar(BaseCommand):
+
     def parse_args(self, args):
         parser = argparse.ArgumentParser(prog='calibrate', usage='%(prog)s [options]')
         parser.add_argument('--channel', help="The channel you'd like to calibrate [0-15]")
@@ -313,7 +322,7 @@ class ConSync(BaseCommand):
     '''
     continuously rsync data
     '''
-    
+
     def parse_args(self, args):
         parser = argparse.ArgumentParser(prog='consync', usage='%(prog)s [options]')
         parser.add_argument('--dir', default='./cont_data/', help='paths to tubs')
@@ -354,14 +363,14 @@ class ConTrain(BaseCommand):
     '''
     continuously train data
     '''
-    
+
     def parse_args(self, args):
         parser = argparse.ArgumentParser(prog='contrain', usage='%(prog)s [options]')
         parser.add_argument('--tub', default='./cont_data/*', help='paths to tubs')
         parser.add_argument('--model', default='./models/drive.h5', help='path to model')
         parser.add_argument('--transfer', default=None, help='path to transfer model')
         parser.add_argument('--type', default='categorical', help='type of model (linear|categorical|rnn|imu|behavior|3d)')
-        parser.add_argument('--aug', action="store_true", help='perform image augmentation')        
+        parser.add_argument('--aug', action="store_true", help='perform image augmentation')
         parsed_args = parser.parse_args(args)
         return parsed_args
 
@@ -397,7 +406,7 @@ class ShowCnnActivations(BaseCommand):
 
         conv_layer_names = self.get_conv_layers(model)
         input_layer = model.get_layer(name='img_in').input
-        activations = []      
+        activations = []
         for conv_layer_name in conv_layer_names:
             output_layer = model.get_layer(name=conv_layer_name).output
 
@@ -421,7 +430,7 @@ class ShowCnnActivations(BaseCommand):
                 self.plt.subplot(rows, cols, j + 1)
 
                 self.plt.imshow(layer[:, :, j])
-        
+
         self.plt.show()
 
     def get_conv_layers(self, model):
@@ -436,7 +445,7 @@ class ShowCnnActivations(BaseCommand):
         parser.add_argument('--image', help='path to image')
         parser.add_argument('--model', default=None, help='path to model')
         parser.add_argument('--config', default='./config.py', help='location of config file to use. default: ./config.py')
-        
+
         parsed_args = parser.parse_args(args)
         return parsed_args
 
@@ -468,7 +477,7 @@ class ShowPredictionPlots(BaseCommand):
         user_angles = []
         user_throttles = []
         pilot_angles = []
-        pilot_throttles = []       
+        pilot_throttles = []
 
         records = records[:limit]
         num_records = len(records)
@@ -523,7 +532,7 @@ class ShowPredictionPlots(BaseCommand):
         args.tub = ','.join(args.tub)
         cfg = load_config(args.config)
         self.plot_predictions(cfg, args.tub, args.model, args.limit, args.type)
-        
+
 
 def execute_from_command_line():
     """
@@ -537,14 +546,15 @@ def execute_from_command_line():
             'tubhist': ShowHistogram,
             'tubplot': ShowPredictionPlots,
             'tubcheck': TubCheck,
-            'makemovie': MakeMovieShell,            
+            'makemovie': MakeMovieShell,
             'createjs': CreateJoystick,
             'consync': ConSync,
             'contrain': ConTrain,
             'cnnactivations': ShowCnnActivations,
             'update': UpdateCar,
+            'jenson': JensonFuncs,
                 }
-    
+
     args = sys.argv[:]
 
     if len(args) > 1 and args[1] in commands.keys():
@@ -554,8 +564,7 @@ def execute_from_command_line():
     else:
         dk.utils.eprint('Usage: The available commands are:')
         dk.utils.eprint(list(commands.keys()))
-        
-    
+
+
 if __name__ == "__main__":
     execute_from_command_line()
-    

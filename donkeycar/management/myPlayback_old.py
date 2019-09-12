@@ -30,44 +30,28 @@ import numpy as np
 import random
 import glob
 #import parts
+from donkeycar.parts.camera import PiCamera
+from donkeycar.parts.transform import Lambda
+
+from donkeycar.parts.actuator import PCA9685, PWMSteering, PWMThrottle
 from donkeycar.parts.datastore import Tub, TubHandler, TubGroup
-from donkeycar.parts.cv_pilot import clip, lineFollower, lineController, pilotLF
+from donkeycar.parts.controller import LocalWebController, JoystickController
+from donkeycar.parts.cv_pilot import clip, lineFollower, lineController
 from donkeycar import utils
 from donkeycar.management.jensoncal import lookAtFloorImg
 from donkeycar.management.jensoncal import lookAtFloorImg2
 from donkeycar.management.jensoncal import getEdges
 print('imports done')
 
+#M = np.array([[3.48407563   4.68019348  -193.634274], [ -0.0138199636 4.47986683 -38.3089390], [0.0 0.0 1.0]])
+#M=np.array([[-1.3026235852665167, -3.499123877776032, 245.75446559156023], [-0.03176219298555294, -5.213807674195841, 254.91345254435038], [-0.000211747953236998, -0.02383023318793577, 1.0]])
+#M=np.array([[3.4840756328915137, 4.680193479489915, -193.6342735096424], [-0.013819963565551818, 4.479866825805638, -38.308939003706215], [-0.0009213309043700334, 0.06172917059279264, 1.0]])
+#M=np.array([[2.6953954394120174, 4.212827438909477, -140.8803316791254], [-0.01381996356555254, 4.479866825805639, -38.308939003706115], [-0.0009213309043700707, 0.061729170592792676, 1.0]])
+
 # an array that transforms the camera image to make vertical parallel lines appear so
 M=np.array([[0.7288447030443173, 5.383427898971357, 9.457197002209224], [-5.551115123125783e-16, 2.8193645731219714, 3.8191672047105385e-14], [-0.0017493890126173033, 0.06997556050469123, 1.0]])
 
-class sliderPlayBack(object):
-    """a self-contained slider class for playback
-        using the matplotlib slider widget"""
-    def __init__(self,axSliderFrame,nFrames):
-        self.nFrames = nFrames
-        self.sFrame = Slider(axSliderFrame, 'Frame no.', 0,nFrames, valinit=0,valfmt='%d')
-        self.frameClick = 0 # the position on the slider the user clicks
-        self.frameRunning = 0 # how many frames on from the user's click we have moved
-        def updateFrameSlider(val):
-            self.frameClick = int(self.sFrame.val)
-            self.frameRunning = 0
-        self.sFrame.on_changed(updateFrameSlider)
-    def getActualFrame(self):
-        # the actual frame is where the user has clicked
-        # plus how many times the loop has run
-        return (self.frameClick+self.frameRunning)%self.nFrames
-    def incrementFrame(self):
-        # go round the loops
-        actualFrame = self.getActualFrame()
-        self.sFrame.vline.set_xdata([actualFrame,actualFrame])
-        self.frameRunning+=1
-
-
 class playBackClass(object):
-    """a class for playing back a tub and showing the results of
-    - image processing
-    - various different pilots """
     def __init__(self):
         self.M = M
         self.nCrop = 50
@@ -79,11 +63,9 @@ class playBackClass(object):
             return
         self.doEdges = args.edge
         self.doTransform = args.transform
-
         # use the cv pilot but allow user to change this if they want
         self.lf = lineFollower(self.doTransform)
-        self.lc = lineController()
-        self.plf = pilotLF(self.doTransform)
+        self.lc = lineController(self.doTransform)
         print('doEdges')
         print(self.doEdges)
         print('doTransform')
@@ -117,23 +99,15 @@ class playBackClass(object):
         ax3.set_ylim([-90*np.pi/180,90*np.pi/180])
         pilotAnglePlot, = ax3.plot(pilotAngles,linestyle = '' ,marker = '.')
         currentPlot, =ax3.plot(0,userAngles[0],marker = 'o')
-
-        nPlotLines = 11
-
-        linesX = np.ones((2,nPlotLines))
-        linesY = np.ones((2,nPlotLines))
-        for x in range(0, nPlotLines):
-            linesY[:,x] = linesY[:,x]*x
-        print(linesX)
-        print(linesY)
-        edgeLines = ax2.plot(linesX,linesY,color = 'green')
-        print(edgeLines)
-            #edgeLines.append(temp)
-            #edgeLines[x].set_data([0,0],[0,1])
         # TODO: put slider in its own separate class
         axSliderFrame = plt.axes([0.2, 0.08, 0.4, 0.03], facecolor='gray')
-        #sFrame = Slider(axSliderFrame, 'Frame no.', 0,nFrames, valinit=0,valfmt='%d')
-        sliderFrame = sliderPlayBack(axSliderFrame,nFrames)
+        sFrame = Slider(axSliderFrame, 'Frame no.', 0,nFrames, valinit=0,valfmt='%d')
+        frameNo = [0]
+        frameCurrent = [0]
+        def updateFrameSlider(val):
+            frameNo[0] = int(sFrame.val)
+            frameCurrent[0] = 0
+        sFrame.on_changed(updateFrameSlider)
 
         record = self.tub.get_record(1)
         img = record["cam/image_array"]
@@ -147,41 +121,35 @@ class playBackClass(object):
         # set up steering lines
 
         def animate(i):
-            # update the slider, which gives us the actual frame we're interested in
-            actualFrame = sliderFrame.getActualFrame()
-            sliderFrame.incrementFrame()
-            record = self.tub.get_record(actualFrame+1) # tubs start at 1
+            # sort out the slider
+            actualFrame = (frameCurrent[0]+frameNo[0])%nFrames+1
+            sFrame.vline.set_xdata([actualFrame,actualFrame])
+
+
+
+            record = self.tub.get_record(actualFrame)
             img = record["cam/image_array"]
             userAngle = float(record["user/angle"])
             # turn user angle into an actual angle
             userAngle = (userAngle-0.5)*2*45*np.pi/180.
+            #TODO: make a unified controller that takes in an image to get rid of this mess
+            angle, intercept = self.lf.run(img)
+            pilotAngle, pilotThrottle = self.lc.run(angle,intercept)
 
-            pilotAngle, pilotThrottle = self.plf.run(img)
-            angle = self.plf.lc.lastAngleOut
-            intercept = self.plf.lc.lastIntercept
-
+            #TODO: sort this as it's showing actual angle (as it should) for pilot but not for user angle
+            #if np.isnan(pilotAngle): pilotAngle = None
             if angle is not None: steerLinePilot.set_data([80,80+40*np.sin(angle)],[80,80-40*np.cos(angle)])
             if angle is not None:
                 pilotAngles[actualFrame] = angle
                 pilotAnglePlot.set_ydata(pilotAngles)
-            lines = self.plf.lf.getAngle.lines
-            if lines is None:
-                nLines = 0
-            else:
-                nLines = len(lines)
-            cntPlot = 0
-            while cntPlot<nPlotLines:
-                if cntPlot<nLines:
-                    for x1,y1,x2,y2 in lines[cntPlot]:
-                        if (np.abs(y1-y2)>15):
-                            edgeLines[cntPlot].set_data([x1,x2],[y1,y2])
-                else:
-                    edgeLines[cntPlot].set_data([0,0],[0,0])
-                cntPlot+=1
+
+
+
             steerLineTub.set_data([80,80+40*np.sin(userAngle)],[80,80-40*np.cos(userAngle)])
             imPlot.set_array(img)
             imPlotProcessed.set_array(self.imProc(img))
             currentPlot.set_data(actualFrame%nFrames, userAngle)
+            frameCurrent[0]+=1
             return imPlot,
         ani = animation.FuncAnimation(fig, animate, np.arange(1, self.tub.get_num_records()),
                                   interval=100, blit=False)
