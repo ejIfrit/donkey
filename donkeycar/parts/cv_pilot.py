@@ -114,7 +114,7 @@ class lineController():
         self.dAngle = 0. # the d is for demand
         self.dIntercept = 70.
         self.kIntercept = 1.
-        self.kAngle = 20.
+        self.kAngle = 1.
         self.lastAngleOut = 0.
         self.lastSteeringAngleOut = 0.
         self.lastIntercept = 70.
@@ -134,12 +134,31 @@ class lineController():
                                         # there are 2 angles, the actual angle and the angle if the lines
     def shutdown(self):
         pass
-
+class pilotNull():
+    # a pilot that doesn't actually do anything, but needed for cases
+    # when we either are just looking at
+    def __init__(self):
+        self.imIn = None
+        self.angle_unbinned = 0.5
+        self.throttle = 0
+    def run(self,imIn):
+        angle_unbinned = 0.5
+        throttle = 0
+        return angle_unbinned,throttle
+    def update(self):
+        # the function runs in its own thread
+        while True:
+            time.sleep(0.1)
+    def run_threaded(self,img_arr):
+        self.imIn = img_arr
+        return self.angle_unbinned,self.throttle
 class pilotLF():
     def __init__(self,doTransform = False,printDebug = False):
         self.lf = lineFollower(doTransform,printDebug)
         self.lc = lineController()
         self.imIn = None
+        self.angle_unbinned = 0.5
+        self.throttle = 0
     def run(self, imIn):
         angle, intercept = self.lf.run(imIn)
         angle_unbinned,throttle = self.lc.run(angle,intercept)

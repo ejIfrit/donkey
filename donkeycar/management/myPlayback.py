@@ -17,7 +17,7 @@ from matplotlib.widgets import Slider
 import numpy as np
 #import parts
 from donkeycar.parts.datastore import Tub, TubHandler, TubGroup
-from donkeycar.parts.cv_pilot import pilotLF
+from donkeycar.parts.cv_pilot import pilotLF, pilotNull
 from donkeycar.management.jensoncal import getEdges
 from donkeycar import utils
 print('imports done')
@@ -55,7 +55,7 @@ class playBackClass(object):
     def __init__(self):
         self.M = M
         self.nCrop = 50
-    def setupPlotLineFollower(self,userAngles,img):
+    def setupPlot(self,userAngles,img):
         # set up figure and subplots
         fig = plt.figure()
         ax1 = plt.subplot2grid((3,2),(0,0))
@@ -90,12 +90,12 @@ class playBackClass(object):
         "steerLinePilot":steerLinePilot
         }
         return fig,plotObjects
-    def updatePlotLineFollower(self,userAngle,pilotAngle,img,plotObjects):
+    def updatePlot(self,userAngle,pilotAngle,img,plotObjects):
         if pilotAngle is not None:
             plotObjects["steerLinePilot"].set_data([80,80+40*np.sin(pilotAngle)],[80,80-40*np.cos(pilotAngle)])
             self.pilotAngles[self.actualFrame] = pilotAngle
             plotObjects["pilotAnglePlot"].set_ydata(self.pilotAngles)
-        lines = self.plf.lf.getAngle.lines
+        lines = self.pilot.lf.getAngle.lines
         if lines is None:
             nLines = 0
         else:
@@ -113,31 +113,33 @@ class playBackClass(object):
         plotObjects["imPlot"].set_array(img)
         plotObjects["imPlotProcessed"].set_array(self.imProc(img))
         plotObjects["currentPlot"].set_data(self.actualFrame%self.nFrames, userAngle)
-    def run(self,args, parser):
+    def getPilot(self,args):
+        return pilotLF(args.transform)
 
+    def run(self,args, parser):
+        # get the data
         if args.tub is None:
             print("ERR>> --tub argument missing.")
             parser.print_help()
             return
+        # get class variables from the input arguments
         self.doEdges = args.edge
         self.doTransform = args.transform
-        self.pilot = pilotLF(self.doTransform)
-        print('doEdges')
-        print(self.doEdges)
-        print('doTransform')
-        print(self.doTransform)
+
         conf = os.path.expanduser(args.config)
         if not os.path.exists(conf):
             print("No config file at location: %s. Add --config to specify\
                  location or run from dir containing config.py." % conf)
             return
-
         self.cfg = dk.load_config(conf)
         print(self.cfg.DATA_PATH)
         self.tub = Tub(os.path.join(self.cfg.DATA_PATH,args.tub))
-        userAngles = []
+
         self.nFrames = len(self.tub.get_index(shuffled=False))
+
+        self.pilot = self.getPilot(args)
         self.pilotAngles = np.ones(self.nFrames)*100
+        userAngles = []
         for iRec in self.tub.get_index(shuffled=False):
             record = self.tub.get_record(iRec)
             userAngle = float(record["user/angle"])
@@ -148,13 +150,12 @@ class playBackClass(object):
         img = record["cam/image_array"]
 
 
-        fig,plotObjects = self.setupPlotLineFollower(userAngles,img)
+        fig,plotObjects = self.setupPlot(userAngles,img)
         # set up slider
         axSliderFrame = plt.axes([0.2, 0.08, 0.4, 0.03], facecolor='gray')
         sliderFrame = sliderPlayBack(axSliderFrame,self.nFrames)
 
         # set up steering lines
-
         def animate(i):
             # update the slider, which gives us the actual frame we're interested in
             self.actualFrame = sliderFrame.getActualFrame()
@@ -165,18 +166,20 @@ class playBackClass(object):
             # turn user angle into an actual angle
             userAngle = (userAngle-0.5)*2*45*np.pi/180.
             pilotAngle, pilotThrottle = self.pilot.run(img)
-            angle = self.pilot.lc.lastAngleOut
-            intercept = self.pilot.lc.lastIntercept
-            self.updatePlotLineFollower(userAngle,angle,img,plotObjects)
+            self.updatePlot(userAngle,pilotAngle,img,plotObjects)
 
             return img,
         ani = animation.FuncAnimation(fig, animate, np.arange(1, self.tub.get_num_records()),
                                   interval=100, blit=False)
 
         plt.show()
-    def imProc(self,imgIn):
+        # TODO: find a neat way of passing through the variables for whether we are transforming/doing edges etc
+    def imProc(self,imgIn,*optionArgs):
         # depending on options process image to show in top right frame
         # almost always crop to remove anything above track level
+        if len(optionArgs)>0:
+
+
         if self.nCrop>=1:
             imgIn = imgIn[self.nCrop:,:,:]
         # extract edges
@@ -187,3 +190,41 @@ class playBackClass(object):
             imgIn = cv2.warpPerspective(imgIn,M,(imgIn.shape[1],imgIn.shape[0]))
         imgOut = imgIn
         return imgOut
+
+class playBackClassNoPilot(playBackClass):
+    '''
+    A class that just plays back the current tub
+    and shows the recorded driver inputs (but keeps the ability to)
+    do some limited image processing
+    '''
+    def __init__(self):
+        print('hello from noproc')
+        super().__init__()
+    def setupPlot(self,userAngles,img):
+        # set up figure and subplots
+        fig = plt.figure()
+        ax1 = plt.subplot2grid((4,2),(0,0),colspan=2,rowspan=2)
+        ax2 = plt.subplot2grid((4,2),(2,0),colspan=2)
+        # set up the axis for showing the user steering
+        ax2.set_ylim([-90*np.pi/180,90*np.pi/180])
+        ax2.plot(userAngles)
+        currentPlot, =ax2.plot(0,userAngles[0],marker = 'o')
+        imPlot = ax1.imshow(img,animated=True)
+        # get actual steering angle from the saved data
+        steerLineTub, = ax1.plot([80,80],[0,80],color='orange')
+        plotObjects = {
+        "currentPlot":currentPlot,
+        "imPlot":imPlot,
+        "steerLineTub":steerLineTub,
+        }
+        return fig,plotObjects
+    def updatePlot(self,userAngle,pilotAngle,img,plotObjects):
+        plotObjects["steerLineTub"].set_data([80,80+40*np.sin(userAngle)],[80,80-40*np.cos(userAngle)])
+        plotObjects["imPlot"].set_array(img)
+        plotObjects["currentPlot"].set_data(self.actualFrame%self.nFrames, userAngle)
+    def imProc(self,imgIn):
+        # depending on options process image to show in top right frame
+        imgIn=imgOut
+        return imgOut
+    def getPilot(self,args):
+        return pilotNull()

@@ -1,11 +1,11 @@
-''' just as base.py has a list of funstion that can be called
+''' just as base.py has a list of functions that can be called
     with the donkey command, this script contains a list of functions
     that are activated when the user types $ donkey jenson ...'''
 import sys
 import argparse
 import donkeycar as dk
 from donkeycar.utils import *
-from donkeycar.management.myPlayback import playBackClass
+from donkeycar.management.myPlayback import *
 class JensonFuncs(object):
     """
     This is the class linked to the "donkey jenson" terminal command.
@@ -33,7 +33,8 @@ class playBackShell(object):
     def parse_args(self, args):
         parser = argparse.ArgumentParser(prog='playback')
         parser.add_argument('--tub', help='The tub to play back from')
-        parser.add_argument('--model', default='./models/drive.h5', help='path to model')
+        parser.add_argument('--model', default='./models/drive.h5', help='path to model for NN controller')
+        parser.add_argument('--line', action="store_true", help='use the line follower controller')
         parser.add_argument('--edge', action="store_true", help='extract the edges from the image')
         parser.add_argument('--transform', action="store_true", help='perspective transform the image')
         parser.add_argument('--car', action="store_true", help='perform image augmentation')
@@ -42,6 +43,16 @@ class playBackShell(object):
         #TODO: let me change where I get my data from just by changeing the name of the car
         parsed_args = parser.parse_args(args)
         return parsed_args, parser
+    def playBackFactory(self,args):
+        '''
+        decide which version of playback we are using
+        '''
+        if args.line:
+            # use the line follower
+            return(playBackClass())
+        else:
+            # no pilot specified, just play back tubs
+            return(playBackClassNoProc())
 
     def run(self, args):
         '''
@@ -49,7 +60,7 @@ class playBackShell(object):
         '''
         args, parser = self.parse_args(args)
         print(args)
-        pb = playBackClass()
+        pb = self.playBackFactory(args)
         pb.run(args,parser)
         #from donkeycar.management.makemovie import MakeMovie
 
