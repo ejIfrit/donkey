@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 playback a tub and show what the image procesisng is doing,
-and what the outputs look linke
+and what the outputs look like
 """
 
 import os
@@ -46,15 +46,114 @@ class sliderPlayBack(object):
         actualFrame = self.getActualFrame()
         self.sFrame.vline.set_xdata([actualFrame,actualFrame])
         self.frameRunning+=1
+class playBackClassBase():
+    '''
+    A class that just plays back the current tub
+    and shows the recorded driver inputs (but keeps the ability to)
+    do some limited image processing
+    '''
+    def __init__(self,args=None):
+        self.M = M # the matrix that
+        self.nCrop = 50
+        self.pilot = self.getPilot(args)
 
-# TODO: make this a template and do different ones for SS and CNN
-class playBackClass(object):
+    def setupPlot(self,userAngles,img):
+        # set up figure and subplots
+        fig = plt.figure()
+        ax1 = plt.subplot2grid((4,2),(0,0),colspan=2,rowspan=2)
+        ax2 = plt.subplot2grid((4,2),(2,0),colspan=2)
+        # set up the axis for showing the user steering
+        ax2.set_ylim([-90*np.pi/180,90*np.pi/180])
+        ax2.plot(userAngles)
+        currentPlot, =ax2.plot(0,userAngles[0],marker = 'o')
+        imPlot = ax1.imshow(img,animated=True)
+        # get actual steering angle from the saved data
+        steerLineTub, = ax1.plot([80,80],[0,80],color='orange')
+        plotObjects = {
+        "currentPlot":currentPlot,
+        "imPlot":imPlot,
+        "steerLineTub":steerLineTub,
+        }
+        return fig,plotObjects
+
+    def updatePlot(self,userAngle,pilotAngle,img,plotObjects):
+        plotObjects["steerLineTub"].set_data([80,80+40*np.sin(userAngle)],[80,80-40*np.cos(userAngle)])
+        plotObjects["imPlot"].set_array(img)
+        plotObjects["currentPlot"].set_data(self.actualFrame%self.nFrames, userAngle)
+    def imProc(self,imgIn):
+        # depending on options process image to show in top right frame
+        imgIn=imgOut
+        return imgOut
+
+    def getPilot(self,args):
+        return pilotNull()
+    def run(self,fileArgs, parser):
+        # get the data
+        if fileArgs.tub is None:
+            print("ERR>> --tub argument missing.")
+            parser.print_help()
+            return
+
+        conf = os.path.expanduser(fileArgs.config)
+        if not os.path.exists(conf):
+            print("No config file at location: %s. Add --config to specify\
+                 location or run from dir containing config.py." % conf)
+            return
+        self.cfg = dk.load_config(conf)
+        print(self.cfg.DATA_PATH)
+        self.tub = Tub(os.path.join(self.cfg.DATA_PATH,fileArgs.tub))
+
+        self.nFrames = len(self.tub.get_index(shuffled=False))
+
+
+        self.pilotAngles = np.ones(self.nFrames)*100
+        userAngles = []
+        for iRec in self.tub.get_index(shuffled=False):
+            record = self.tub.get_record(iRec)
+            userAngle = float(record["user/angle"])
+            userAngle = (userAngle-0.5)*2*45*np.pi/180.
+            userAngles.append(userAngle)
+        self.index = self.tub.get_index(shuffled=False)
+        record = self.tub.get_record(1)
+        img = record["cam/image_array"]
+
+
+        fig,plotObjects = self.setupPlot(userAngles,img)
+        # set up slider
+        axSliderFrame = plt.axes([0.2, 0.08, 0.4, 0.03], facecolor='gray')
+        sliderFrame = sliderPlayBack(axSliderFrame,self.nFrames)
+
+        # set up steering lines
+        def animate(i):
+            # update the slider, which gives us the actual frame we're interested in
+            self.actualFrame = sliderFrame.getActualFrame()
+            sliderFrame.incrementFrame()
+            record = self.tub.get_record(self.actualFrame+1) # tubs start at 1
+            img = record["cam/image_array"]
+            userAngle = float(record["user/angle"])
+            # turn user angle into an actual angle
+            userAngle = (userAngle-0.5)*2*45*np.pi/180.
+            pilotAngle, pilotThrottle = self.pilot.run(img)
+            self.updatePlot(userAngle,pilotAngle,img,plotObjects)
+
+            return img,
+        ani = animation.FuncAnimation(fig, animate, np.arange(1, self.tub.get_num_records()),
+                                  interval=100, blit=False)
+
+        plt.show()
+
+
+
+class playBackClassLine(playBackClassBase):
     """a class for playing back a tub and showing the results of
     - image processing
     - various different pilots """
-    def __init__(self):
-        self.M = M
-        self.nCrop = 50
+    def __init__(self,args):
+        print()
+        super().__init__(args)
+        # set class variables from the input arguments
+        self.doEdges = args.edge
+        self.doTransform = args.transform
     def setupPlot(self,userAngles,img):
         # set up figure and subplots
         fig = plt.figure()
@@ -115,71 +214,9 @@ class playBackClass(object):
         plotObjects["currentPlot"].set_data(self.actualFrame%self.nFrames, userAngle)
     def getPilot(self,args):
         return pilotLF(args.transform)
-
-    def run(self,args, parser):
-        # get the data
-        if args.tub is None:
-            print("ERR>> --tub argument missing.")
-            parser.print_help()
-            return
-        # get class variables from the input arguments
-        self.doEdges = args.edge
-        self.doTransform = args.transform
-
-        conf = os.path.expanduser(args.config)
-        if not os.path.exists(conf):
-            print("No config file at location: %s. Add --config to specify\
-                 location or run from dir containing config.py." % conf)
-            return
-        self.cfg = dk.load_config(conf)
-        print(self.cfg.DATA_PATH)
-        self.tub = Tub(os.path.join(self.cfg.DATA_PATH,args.tub))
-
-        self.nFrames = len(self.tub.get_index(shuffled=False))
-
-        self.pilot = self.getPilot(args)
-        self.pilotAngles = np.ones(self.nFrames)*100
-        userAngles = []
-        for iRec in self.tub.get_index(shuffled=False):
-            record = self.tub.get_record(iRec)
-            userAngle = float(record["user/angle"])
-            userAngle = (userAngle-0.5)*2*45*np.pi/180.
-            userAngles.append(userAngle)
-        self.index = self.tub.get_index(shuffled=False)
-        record = self.tub.get_record(1)
-        img = record["cam/image_array"]
-
-
-        fig,plotObjects = self.setupPlot(userAngles,img)
-        # set up slider
-        axSliderFrame = plt.axes([0.2, 0.08, 0.4, 0.03], facecolor='gray')
-        sliderFrame = sliderPlayBack(axSliderFrame,self.nFrames)
-
-        # set up steering lines
-        def animate(i):
-            # update the slider, which gives us the actual frame we're interested in
-            self.actualFrame = sliderFrame.getActualFrame()
-            sliderFrame.incrementFrame()
-            record = self.tub.get_record(self.actualFrame+1) # tubs start at 1
-            img = record["cam/image_array"]
-            userAngle = float(record["user/angle"])
-            # turn user angle into an actual angle
-            userAngle = (userAngle-0.5)*2*45*np.pi/180.
-            pilotAngle, pilotThrottle = self.pilot.run(img)
-            self.updatePlot(userAngle,pilotAngle,img,plotObjects)
-
-            return img,
-        ani = animation.FuncAnimation(fig, animate, np.arange(1, self.tub.get_num_records()),
-                                  interval=100, blit=False)
-
-        plt.show()
-        # TODO: find a neat way of passing through the variables for whether we are transforming/doing edges etc
-    def imProc(self,imgIn,*optionArgs):
+    def imProc(self,imgIn):
         # depending on options process image to show in top right frame
         # almost always crop to remove anything above track level
-        if len(optionArgs)>0:
-
-
         if self.nCrop>=1:
             imgIn = imgIn[self.nCrop:,:,:]
         # extract edges
@@ -190,41 +227,3 @@ class playBackClass(object):
             imgIn = cv2.warpPerspective(imgIn,M,(imgIn.shape[1],imgIn.shape[0]))
         imgOut = imgIn
         return imgOut
-
-class playBackClassNoPilot(playBackClass):
-    '''
-    A class that just plays back the current tub
-    and shows the recorded driver inputs (but keeps the ability to)
-    do some limited image processing
-    '''
-    def __init__(self):
-        print('hello from noproc')
-        super().__init__()
-    def setupPlot(self,userAngles,img):
-        # set up figure and subplots
-        fig = plt.figure()
-        ax1 = plt.subplot2grid((4,2),(0,0),colspan=2,rowspan=2)
-        ax2 = plt.subplot2grid((4,2),(2,0),colspan=2)
-        # set up the axis for showing the user steering
-        ax2.set_ylim([-90*np.pi/180,90*np.pi/180])
-        ax2.plot(userAngles)
-        currentPlot, =ax2.plot(0,userAngles[0],marker = 'o')
-        imPlot = ax1.imshow(img,animated=True)
-        # get actual steering angle from the saved data
-        steerLineTub, = ax1.plot([80,80],[0,80],color='orange')
-        plotObjects = {
-        "currentPlot":currentPlot,
-        "imPlot":imPlot,
-        "steerLineTub":steerLineTub,
-        }
-        return fig,plotObjects
-    def updatePlot(self,userAngle,pilotAngle,img,plotObjects):
-        plotObjects["steerLineTub"].set_data([80,80+40*np.sin(userAngle)],[80,80-40*np.cos(userAngle)])
-        plotObjects["imPlot"].set_array(img)
-        plotObjects["currentPlot"].set_data(self.actualFrame%self.nFrames, userAngle)
-    def imProc(self,imgIn):
-        # depending on options process image to show in top right frame
-        imgIn=imgOut
-        return imgOut
-    def getPilot(self,args):
-        return pilotNull()

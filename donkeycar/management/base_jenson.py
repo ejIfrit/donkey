@@ -49,15 +49,17 @@ class playBackShell(object):
         '''
         if args.line:
             # use the line follower
-            return(playBackClass())
+            return(playBackClassLine(args))
         else:
             # no pilot specified, just play back tubs
-            return(playBackClassNoProc())
+            return(playBackClassBase(args))
 
     def run(self, args):
         '''
         Make the playback class and get it to do its thing
         '''
+        #TODO, at the moment, everything is just 'args'. Need to make This
+        # a bit clearer- run just contains file arguments, playbackfactory sets up class
         args, parser = self.parse_args(args)
         print(args)
         pb = self.playBackFactory(args)
