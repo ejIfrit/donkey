@@ -5,7 +5,7 @@ import sys
 import argparse
 import donkeycar as dk
 from donkeycar.utils import *
-from donkeycar.management.myPlayback import *
+from donkeycar.management.jenson.myPlayback import *
 class JensonFuncs(object):
     """
     This is the class linked to the "donkey jenson" terminal command.

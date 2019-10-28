@@ -20,7 +20,7 @@ from donkeycar.parts.datastore import Tub
 from donkeycar.utils import *
 from donkeycar.management.tub import TubManager
 from donkeycar.management.joystick_creator import CreateJoystick
-from donkeycar.management.base_jenson import *
+from donkeycar.management.jenson.base_jenson import *
 import numpy as np
 
 PACKAGE_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))

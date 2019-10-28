@@ -3,8 +3,8 @@ import numpy as np
 import cv2
 assert cv2.__version__[0] == '3', 'The fisheye module requires opencv version >= 3.0.0'
 import donkeycar as dk
-from donkeycar.management.jensoncal import lookAtFloorImg2
-from donkeycar.management.jensoncal import getEdges
+from donkeycar.management.jenson.jensoncal import lookAtFloorImg2
+from donkeycar.management.jenson.jensoncal import getEdges
 import time
 import argparse
 
