@@ -6,6 +6,7 @@ import argparse
 import donkeycar as dk
 from donkeycar.utils import *
 from donkeycar.management.jenson.myPlayback import *
+from donkeycar.management.jenson.playBackSegm import *
 class JensonFuncs(object):
     """
     This is the class linked to the "donkey jenson" terminal command.
@@ -37,8 +38,7 @@ class playBackShell(object):
         parser.add_argument('--line', action="store_true", help='use the line follower controller')
         parser.add_argument('--edge', action="store_true", help='extract the edges from the image')
         parser.add_argument('--transform', action="store_true", help='perspective transform the image')
-        parser.add_argument('--car', action="store_true", help='perform image augmentation')
-        parser.add_argument('--single', default=None, help='the model type to load')
+        parser.add_argument('--segm', action="store_true", help='use semantic segmenattion on the image')
         parser.add_argument('--config', default='~/d3_1/config.py', help='location of config file to use. default: ./config.py')
         #TODO: let me change where I get my data from just by changeing the name of the car
         parsed_args = parser.parse_args(args)
@@ -50,9 +50,13 @@ class playBackShell(object):
         if args.line:
             # use the line follower
             return(playBackClassLine(args))
+        elif args.segm:
+            # use the line follower
+            return(playBackClassSegm(args))
         else:
             # no pilot specified, just play back tubs
             return(playBackClassBase(args))
+
 
     def run(self, args):
         '''

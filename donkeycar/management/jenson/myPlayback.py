@@ -82,7 +82,7 @@ class playBackClassBase():
         plotObjects["currentPlot"].set_data(self.actualFrame%self.nFrames, userAngle)
     def imProc(self,imgIn):
         # depending on options process image to show in top right frame
-        imgIn=imgOut
+        imgOut=imgIn
         return imgOut
 
     def getPilot(self,args):
@@ -149,12 +149,12 @@ class playBackClassLine(playBackClassBase):
     - image processing
     - various different pilots """
     def __init__(self,args):
-        print()
         super().__init__(args)
         # set class variables from the input arguments
         self.doEdges = args.edge
         self.doTransform = args.transform
     def setupPlot(self,userAngles,img):
+        #def (setupPlotImproc):
         # set up figure and subplots
         fig = plt.figure()
         ax1 = plt.subplot2grid((3,2),(0,0))
@@ -189,11 +189,7 @@ class playBackClassLine(playBackClassBase):
         "steerLinePilot":steerLinePilot
         }
         return fig,plotObjects
-    def updatePlot(self,userAngle,pilotAngle,img,plotObjects):
-        if pilotAngle is not None:
-            plotObjects["steerLinePilot"].set_data([80,80+40*np.sin(pilotAngle)],[80,80-40*np.cos(pilotAngle)])
-            self.pilotAngles[self.actualFrame] = pilotAngle
-            plotObjects["pilotAnglePlot"].set_ydata(self.pilotAngles)
+    def updateLines(self,plotObjects):
         lines = self.pilot.lf.getAngle.lines
         if lines is None:
             nLines = 0
@@ -208,10 +204,20 @@ class playBackClassLine(playBackClassBase):
             else:
                 plotObjects["edgeLines"][cntPlot].set_data([0,0],[0,0])
             cntPlot+=1
+    def updatePlotProc(self,userAngle,pilotAngle,img,plotObjects):
+        if pilotAngle is not None:
+            plotObjects["steerLinePilot"].set_data([80,80+40*np.sin(pilotAngle)],[80,80-40*np.cos(pilotAngle)])
+            self.pilotAngles[self.actualFrame] = pilotAngle
+            plotObjects["pilotAnglePlot"].set_ydata(self.pilotAngles)
+
         plotObjects["steerLineTub"].set_data([80,80+40*np.sin(userAngle)],[80,80-40*np.cos(userAngle)])
         plotObjects["imPlot"].set_array(img)
         plotObjects["imPlotProcessed"].set_array(self.imProc(img))
         plotObjects["currentPlot"].set_data(self.actualFrame%self.nFrames, userAngle)
+
+    def updatePlot(self,userAngle,pilotAngle,img,plotObjects):
+        self.updatePlotProc(userAngle,pilotAngle,img,plotObjects)
+        self.updateLines(plotObjects)
     def getPilot(self,args):
         return pilotLF(args.transform)
     def imProc(self,imgIn):
